@@ -90,3 +90,24 @@ This build will spend a few minutes. We recommend you to use better cpu such as 
 
 If you wish to utilize `mimalloc` as a memory allocator, you need to set `BUDDY_MLIR_USE_MIMALLOC` and `MIMALLOC_BUILD_DIR`.
 For more details, please see [here](../../thirdparty/README.md#the-mimalloc-allocator).
+
+## Testing the segmentation model using a py file
+
+1. Set the `PYTHONPATH` environment variable. Make sure that the `PYTHONPATH` variable includes the directory of LLVM/MLIR python bindings and the directory of Buddy MLIR python packages.
+
+```
+$ export PYTHONPATH=/path-to-buddy-mlir/llvm/build/tools/mlir/python_packages/mlir_core:/path-to-buddy-mlir/build/python_packages:${PYTHONPATH}
+
+// For example:
+// Navigate to your buddy-mlir/build directory
+$ cd buddy-mlir/build
+$ export BUDDY_MLIR_BUILD_DIR=$PWD
+$ export LLVM_MLIR_BUILD_DIR=$PWD/../llvm/build
+$ export PYTHONPATH=${LLVM_MLIR_BUILD_DIR}/tools/mlir/python_packages/mlir_core:${BUDDY_MLIR_BUILD_DIR}/python_packages:${PYTHONPATH}
+```
+
+2. Execute the py file
+```
+$ cd examples/LlamaTest
+$ python3 llama-import.py --output-dir ./
+```
