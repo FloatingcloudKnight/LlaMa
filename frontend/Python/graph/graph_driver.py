@@ -20,11 +20,15 @@
 #
 # ===---------------------------------------------------------------------------
 
+import numpy as np
 from mlir import ir
 from collections import deque, defaultdict
 
 from .graph import Graph, GraphImporter, TensorMeta
 from .operation import FuncOp, CallOp, PlaceholderOp, OutputOp, GetItemOp
+
+from .operation import *
+from .type import *
 
 
 class GraphDriver:
@@ -64,11 +68,16 @@ class GraphDriver:
             self._subgraphs_inputs,
             self._subgraphs_outputs,
         ) = self.build_subgraph_by_group()
+        self._maingraphs = {}
 
     @property
     def subgraphs(self):
         return list(self._subgraphs.values())
-
+    
+    @property
+    def maingraphs(self):
+        return list(self._maingraphs.values())
+    
     def build_subgraph_by_group(self):
         """
         Builds subgraphs from a given graph based on groups.
@@ -81,6 +90,8 @@ class GraphDriver:
         and subgraph outputs.
         """
 
+        # 识别每个子图的输入节点，并将这些输入节点存储在subgraphs_inputs中
+        # 每个子图的输入节点是那些不属于当前子图但与当前子图中的操作有依赖关系的节点。
         subgraphs_inputs = {}
 
         # Identify inputs for each subgraph
@@ -95,13 +106,15 @@ class GraphDriver:
                         subgraphs_inputs[subgraph_name].append(parent)
         subgraphs_outputs = {}
         output_node = []
-
+        
+        # 识别整个图的输出节点，并将这些输出节点存储在output_node列表中，收集整个图的所有输出节点
         # Identify output nodes of the entire graph
         for node in self._graph.body:
             if isinstance(node, OutputOp):
                 for arg in node.args:
                     output_node.append(arg)
 
+        # 识别每个子图的输出节点，并建立子图之间的依赖关系。
         # Identify outputs for each subgraph and build dependencies between subgraphs
         for subgraph_name in self._graph.op_groups.keys():
             subgraphs_outputs[subgraph_name] = []
@@ -120,6 +133,7 @@ class GraphDriver:
         for subgraph_name in self._graph.op_groups.keys():
             subgraph_input = []
             subgraph_body = []
+            # 设备信息
             subgraph_device = self._graph.group_map_device[subgraph_name]
 
             # Construct input placeholder nodes
@@ -213,16 +227,27 @@ class GraphDriver:
         implementation.
 
         """
-        main_graph = Graph(
-            self._graph._inputs,
-            self._graph._fake_params,
-            self._graph._ops_registry,
-            self._graph._func_name,
-            self._graph._verbose,
-        )
 
+        # Analysis topology order to sort subgraph call.
+        topo_order = self.topological_sort_subgraph()
+        if topo_order == None:
+            print("Error : Graph Partitioning is illegal!")
+            return None
+        
+        # 为每个子图创建一个FuncOp节点，并将这些节点添加到主图中。
         # Adding FuncOp nodes for each subgraph
-        for subgraph_name in self._subgraphs.keys():
+        for i, subgraph_name in enumerate(self._subgraphs.keys()):
+            main_graph_name = "forward{}".format(i)
+            node_table : Dict[str, Op] = {}
+
+            main_graph = Graph(
+                self._graph._inputs,
+                self._graph._fake_params,
+                self._graph._ops_registry,
+                main_graph_name,
+                self._graph._verbose,
+            )
+
             func_node = FuncOp()
             func_node.name = subgraph_name
             func_node.tensor_meta = {"shape": [], "dtype": []}
@@ -236,25 +261,22 @@ class GraphDriver:
                     self._graph.node_table[output].tensor_meta["dtype"]
                 )
             main_graph.add_node(func_node)
+            node_table[func_node.name] = func_node
+            # Adding placeholder operations from the original graph
+            for op in self._graph.body:
+                if isinstance(op, PlaceholderOp) :
+                    node_table[op.name] = op
+                    main_graph.add_node(op)
 
-        # Adding placeholder operations from the original graph
-        for op in self._graph.body:
-            if isinstance(op, PlaceholderOp):
-                main_graph.add_node(op)
-        # Analysis topology order to sort subgraph call.
-        topo_order = self.topological_sort_subgraph()
-        if topo_order == None:
-            print("Error : Graph Partitioning is illegal!")
-            return None
-        # Adding CallOp to invoke the single subgraph
-        for i, subgraph_name in enumerate(topo_order):
+            # Adding CallOp to invoke the single subgraph
             call_node = CallOp()
             call_node.name = "call{}".format(i)
             call_node.call_func_name = subgraph_name
             call_node.tensor_meta = {"shape": [], "dtype": []}
             for inp in self._subgraphs_inputs[subgraph_name]:
-                if inp in main_graph.node_table:
+                if inp in node_table:
                     call_node.add_argument(inp)
+                    main_graph.add_node(node_table[inp])
                     continue
                 for key, value in self._subgraphs_outputs.items():
                     if inp in value:
@@ -272,26 +294,41 @@ class GraphDriver:
                 )
             self._call_table[subgraph_name] = call_node
             main_graph.add_node(call_node)
-        # Adding GetItemOps to retrieve individual output tensors
-        output_node = OutputOp()
-        for i, output in enumerate(self._subgraphs_outputs[topo_order[-1]]):
-            getitem_node = GetItemOp()
-            getitem_node.add_argument(call_node.name)
-            getitem_node.add_argument(i)
-            getitem_node.name = "getitem{}".format(i)
-            output_node.add_argument(getitem_node.name)
-            main_graph.add_node(getitem_node)
-        # Marking the final output of the main graph
-        output_node.name = "output"
-        main_graph.add_node(output_node)
-        # Importing the main graph
-        with ir.Location.unknown(ir.Context()):
-            main_importer = GraphImporter(
-                main_graph.body,
-                main_graph._fake_params,
-                main_graph._inputs,
-                main_graph._func_name,
-                main_graph._ops_registry,
-                do_param_pack,
-            )
-            return main_importer.import_main_graph()
+
+            # Identify inputs for each subgraph
+            maingraph_input = main_graph._inputs
+            # for op in self._subgraphs_inputs[subgraph_name]:
+            #     if (op not in main_graph.node_table.values()):
+            #         node = self._graph.node_table[op]
+            #         node_shape = node.tensor_meta["shape"]
+            #         node_dtype = node.tensor_meta["dtype"]
+            #         input_tensor_meta = TensorMeta(node_shape, node_dtype)
+            #         maingraph_input.append(input_tensor_meta)
+        
+            # Adding GetItemOps to retrieve individual output tensors
+            output_node = OutputOp()
+            for i, output in enumerate(self._subgraphs_outputs[subgraph_name]):
+                getitem_node = GetItemOp()
+                getitem_node.add_argument(call_node.name)
+                getitem_node.add_argument(i)
+                getitem_node.name = "getitem{}".format(i)
+                output_node.add_argument(getitem_node.name)
+                main_graph.add_node(getitem_node)
+            # Marking the final output of the main graph
+            output_node.name = "output"
+            main_graph.add_node(output_node)
+            self._maingraphs[main_graph_name] = main_graph
+            
+            # Importing the main graph
+            with ir.Location.unknown(ir.Context()):
+                main_importer = GraphImporter(
+                    main_graph.body,
+                    main_graph._fake_params,
+                    maingraph_input,
+                    main_graph._func_name,
+                    main_graph._ops_registry,
+                    do_param_pack,
+                )
+                self._maingraphs[main_graph_name] = main_importer.import_main_graph()
+                return main_graph
+                

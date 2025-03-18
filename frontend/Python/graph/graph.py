@@ -244,13 +244,40 @@ class Graph:
         Returns:
         - None
         """
+        submodel_count = 0
+        tsf_count = 0
         for i, op in enumerate(self._body):
             if isinstance(op, PlaceholderOp) or isinstance(op, OutputOp):
                 continue
-            group = [op]
-            subgraph_name = "subgraph{}".format(i)
-            self.group_map_device[subgraph_name] = DeviceType.CPU
+            
+            if "subgraph{}".format(submodel_count) not in self.op_groups.keys():
+                group = [op]
+                subgraph_name = "subgraph{}".format(submodel_count)
+                self.group_map_device[subgraph_name] = DeviceType.CPU
+                self.op_groups[subgraph_name] = group
+                if isinstance(op, EmbeddingOp):
+                    submodel_count += 1
+                continue
+            
+            # todo: Added handling of more complex embedding cases
+
+            if isinstance(op, PowOp): 
+                if tsf_count != 0 and tsf_count%2 == 0:
+                    submodel_count += 1
+                    tsf_count += 1
+                    group = [op]
+                    subgraph_name = "subgraph{}".format(submodel_count)
+                    self.group_map_device[subgraph_name] = DeviceType.CPU
+                    self.op_groups[subgraph_name] = group
+                    continue
+                else:
+                    tsf_count += 1
+
+            subgraph_name = "subgraph{}".format(submodel_count)
+            group = self.op_groups[subgraph_name]
+            group.append(op)
             self.op_groups[subgraph_name] = group
+            
 
     def fuse_ops(self, pattern_list: List[FunctionType]):
         """
