@@ -255,14 +255,12 @@ class Graph:
                 subgraph_name = "subgraph{}".format(submodel_count)
                 self.group_map_device[subgraph_name] = DeviceType.CPU
                 self.op_groups[subgraph_name] = group
-                if isinstance(op, EmbeddingOp):
-                    submodel_count += 1
                 continue
             
             # todo: Added handling of more complex embedding cases
 
             if isinstance(op, PowOp): 
-                if tsf_count != 0 and tsf_count%2 == 0:
+                if tsf_count%2 == 0:
                     submodel_count += 1
                     tsf_count += 1
                     group = [op]
@@ -466,10 +464,12 @@ class GraphImporter:
         if ops_registry is None:
             ops_registry = {}
         self._symbol_table = {}
+        self._symbol_table_output = {}
         self._body = body
         self._device = device
         self._func_name = func_name
         self._params = params
+        self._param_pack_offsets = []
         self._inputs = inputs
         self._verbose = verbose
         self._do_param_pack = do_param_pack
@@ -681,11 +681,11 @@ class GraphImporter:
                     pack_of_dtype = pack
                     break
             placeholder_name = self._ops_registry["param.extract"](
-                node, self._current_param_pack_offset[dtype], pack_of_dtype
+                node, self._param_pack_offsets[self._num_input_visited], pack_of_dtype
             ).result
-            self._current_param_pack_offset[dtype] += functools.reduce(
-                lambda x, y: x * y, list(node.tensor_meta["shape"]), 1
-            )
+            # self._current_param_pack_offset[dtype] += functools.reduce(
+            #     lambda x, y: x * y, list(node.tensor_meta["shape"]), 1
+            # )
         elif self._do_param_pack:
             if len(self._params) > 0:
                 placeholder_name = args_list[
@@ -719,15 +719,19 @@ class GraphImporter:
                     operation, ir.OpView
                 ):
                     self._symbol_table[(str(node.name), i)] = operation.result
+                    self._symbol_table_output[(str(node.name), i)] = operation.result
                 elif isinstance(operation, ir.OpResult):
                     self._symbol_table[(str(node.name), i)] = operation
+                    self._symbol_table_output[(str(node.name), i)] = operation
                 else:
                     raise NotImplementedError
         elif isinstance(op_ret, ir.OpResult):
             self._symbol_table[(str(node.name), 0)] = op_ret
+            self._symbol_table_output[(str(node.name), 0)] = op_ret
         else:
             for i, result in enumerate(op_ret.results):
                 self._symbol_table[(str(node.name), i)] = result
+                self._symbol_table_output[(str(node.name), i)] = result
 
     def get_output_nodes(self):
         """

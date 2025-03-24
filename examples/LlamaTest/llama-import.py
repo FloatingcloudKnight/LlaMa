@@ -110,18 +110,24 @@ graphs[0].init_op_group()
 #         print(f"Key: {key} has an empty list.")
 
 driver = GraphDriver(graphs[0])
-driver.subgraphs[0].lower_to_top_level_ir()
-driver.subgraphs[1].lower_to_top_level_ir()
+for i in range(len(driver.subgraphs)):
+    driver.subgraphs[i].lower_to_top_level_ir()
 
-# # Save the generated files to the specified output directory.
-# with open(os.path.join(output_dir, "subgraph0.mlir"), "w") as module_file:
-#     print(driver.subgraphs[0]._imported_module, file=module_file)
-# with open(os.path.join(output_dir, "subgraph1.mlir"), "w") as module_file:
-#     print(driver.subgraphs[1]._imported_module, file=module_file)
-with open(os.path.join(output_dir, "forward0.mlir"), "w") as module_file:
-    print(driver.construct_main_graph(True), file=module_file)
-for main_graph in driver.maingraphs:
-    print(f"main_graph: {main_graph.body}.")
+# for op in driver._subgraphs_outputs.values():
+#     print(f"Op: {op}")
+driver.construct_main_graph(True)
+# Save the generated files to the specified output directory.
+for i in range(len(driver.subgraphs)): 
+    # with open(os.path.join(output_dir, f"subgraph{i}.mlir"), "w") as module_file:
+    #     print(driver.subgraphs[i]._imported_module, file=module_file)
+    with open(os.path.join(output_dir, f"forward{i}.mlir"), "w") as module_file:
+        print(driver.modules[i], file=module_file)
+# with open(os.path.join(output_dir, f"forward0.mlir"), "w") as module_file:
+#         print(driver.maingraphs[0], file=module_file)
+# with open(os.path.join(output_dir, f"forward1.mlir"), "w") as module_file:
+#         print(driver.maingraphs[1], file=module_file)
+# for main_graph in driver.maingraphs:
+#     print(f"main_graph: {main_graph.body}.")
 # all_param = numpy.concatenate(
 #     [param.detach().numpy().reshape([-1]) for param in params]
 # )

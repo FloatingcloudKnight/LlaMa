@@ -1,6 +1,4 @@
 module {
-  func.func private @printMemrefI64(memref<*xi64>)
-  func.func private @printMemrefF32(memref<*xf32>)
   func.func private @subgraph0(memref<32000x4096xf32, strided<[4096, 1], offset: ?>>, memref<1x40xi64, strided<[40, 1], offset: ?>>) -> memref<1x40x4096xf32>
   func.func @forward0(%arg0: memref<6738415680xf32>, %arg1: memref<1x40xi64>) -> memref<1x40x4096xf32> {
     %subview = memref.subview %arg0[0] [131072000] [1] : memref<6738415680xf32> to memref<131072000xf32>
