@@ -38,14 +38,14 @@ extern "C" void _mlir_ciface_forward0(MemRef<float, 3> *, MemRef<float, 1> *,
                                       Text<size_t, 2> *);
 extern "C" void _mlir_ciface_forward1(MemRef<float, 3> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *);
-extern "C" void _mlir_ciface_forward2(MemRef<float, 3> *, MemRef<float, 1> *,
-                                      MemRef<float, 3> *);
-extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 1> *,
-                                      MemRef<float, 3> *);
-extern "C" void _mlir_ciface_forward4(MemRef<float, 3> *, MemRef<float, 1> *,
-                                      MemRef<float, 3> *);
-extern "C" void _mlir_ciface_forward5(MemRef<float, 3> *, MemRef<float, 1> *,
-                                      MemRef<float, 3> *);
+// extern "C" void _mlir_ciface_forward2(MemRef<float, 3> *, MemRef<float, 1> *,
+//                                       MemRef<float, 3> *);
+// extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 1> *,
+//                                       MemRef<float, 3> *);
+// extern "C" void _mlir_ciface_forward4(MemRef<float, 3> *, MemRef<float, 1> *,
+//                                       MemRef<float, 3> *);
+// extern "C" void _mlir_ciface_forward5(MemRef<float, 3> *, MemRef<float, 1> *,
+//                                       MemRef<float, 3> *);
 // -----------------------------------------------------------------------------
 // Helper Functions
 // -----------------------------------------------------------------------------
@@ -154,8 +154,9 @@ int main() {
 
   /// Define directories of vacabulary and parameter file.
   std::string llamaDir = LLAMA_DIS_EXAMPLE_PATH;
+  std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
   const std::string vocabDir = llamaDir + "/vocab.txt";
-  const std::string paramsDir = llamaDir + "/arg0.data";
+  const std::string paramsDir = llamaBuildDir + "/arg0.data";
 
   /// Get user message.
   std::string inputStr;
@@ -187,10 +188,6 @@ int main() {
   // Execute the forward pass of the model.
   _mlir_ciface_forward0(&resultContainer, &paramsContainer, &inputContainer);
   _mlir_ciface_forward1(&resultContainer, &paramsContainer, &resultContainer);
-  _mlir_ciface_forward2(&resultContainer, &paramsContainer, &resultContainer);
-  _mlir_ciface_forward3(&resultContainer, &paramsContainer, &resultContainer);
-  _mlir_ciface_forward4(&resultContainer, &paramsContainer, &resultContainer);
-  _mlir_ciface_forward5(&resultContainer, &paramsContainer, &resultContainer);
 
   const auto inferenceEnd = std::chrono::high_resolution_clock::now();
   const std::chrono::duration<double, std::milli> inferenceTime =
@@ -205,9 +202,6 @@ int main() {
   /// Print the final result
   std::cout << "\n\033[33;1m[Input]\033[0m " << inputStr << std::endl;
   
-  // Verifies two arrays for equality within a specified tolerance.
-  
-
   free(resultContainer.release());
   free(resultContainer0.release());
 

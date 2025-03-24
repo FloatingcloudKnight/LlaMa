@@ -118,8 +118,8 @@ for i in range(len(driver.subgraphs)):
 driver.construct_main_graph(True)
 # Save the generated files to the specified output directory.
 for i in range(len(driver.subgraphs)): 
-    # with open(os.path.join(output_dir, f"subgraph{i}.mlir"), "w") as module_file:
-    #     print(driver.subgraphs[i]._imported_module, file=module_file)
+    with open(os.path.join(output_dir, f"subgraph{i}.mlir"), "w") as module_file:
+        print(driver.subgraphs[i]._imported_module, file=module_file)
     with open(os.path.join(output_dir, f"forward{i}.mlir"), "w") as module_file:
         print(driver.modules[i], file=module_file)
 # with open(os.path.join(output_dir, f"forward0.mlir"), "w") as module_file:
@@ -128,7 +128,7 @@ for i in range(len(driver.subgraphs)):
 #         print(driver.maingraphs[1], file=module_file)
 # for main_graph in driver.maingraphs:
 #     print(f"main_graph: {main_graph.body}.")
-# all_param = numpy.concatenate(
-#     [param.detach().numpy().reshape([-1]) for param in params]
-# )
-# all_param.tofile(os.path.join(output_dir, "arg0.data"))
+all_param = numpy.concatenate(
+    [param.detach().numpy().reshape([-1]) for param in params]
+)
+all_param.tofile(os.path.join(output_dir, "arg0.data"))
