@@ -311,7 +311,7 @@ class Graph:
         for transform_func in func_list:
             transform_func(self)
 
-    def lower_to_top_level_ir(self):
+    def lower_to_top_level_ir(self, num : int = 0):
         """
         Lowers the graph to top-level MLIR dialects.
 
@@ -339,6 +339,8 @@ class Graph:
                 verbose=self._verbose,
             )
             self._imported_module = fx_importer.import_graph()
+            # if num == 1:
+            #     fx_importer.partition_symbol_table()
             outputs = fx_importer.get_output_nodes()
         self._output_memref = []
         output_ranks = []
@@ -469,7 +471,6 @@ class GraphImporter:
         self._device = device
         self._func_name = func_name
         self._params = params
-        self._param_pack_offsets = []
         self._inputs = inputs
         self._verbose = verbose
         self._do_param_pack = do_param_pack
@@ -534,6 +535,17 @@ class GraphImporter:
             self._param_packs.append(
                 ir.MemRefType.get([param_total_size], mlir_dtype)
             )
+
+    def addsymbol(self) -> None:
+        """
+        Slice the symbols as required and add them to the symbol table.
+
+        Returns:
+        None
+        """
+        for key, value in self._symbol_table.items():
+            print(f"Key: {key}, Value: {value}")
+            
 
     def import_graph(self) -> ir.Module:
         """
@@ -671,6 +683,7 @@ class GraphImporter:
         Returns:
         None
         """
+        print(f"num_input_visited:{self._num_input_visited}")
         if self._num_input_visited < len(self._params) and self._do_param_pack:
             dtype = node.tensor_meta["dtype"]
             pack_of_dtype = None
@@ -680,14 +693,17 @@ class GraphImporter:
                 ).element_type == self._str_to_mlir_dtype(dtype):
                     pack_of_dtype = pack
                     break
+            # print("pack_of_dtype: ", pack_of_dtype)
             placeholder_name = self._ops_registry["param.extract"](
-                node, self._param_pack_offsets[self._num_input_visited], pack_of_dtype
+                node, self._current_param_pack_offset[dtype], pack_of_dtype
             ).result
-            # self._current_param_pack_offset[dtype] += functools.reduce(
-            #     lambda x, y: x * y, list(node.tensor_meta["shape"]), 1
-            # )
+            self._current_param_pack_offset[dtype] += functools.reduce(
+                lambda x, y: x * y, list(node.tensor_meta["shape"]), 1
+            )
         elif self._do_param_pack:
             if len(self._params) > 0:
+                print(f"args_list:{len(args_list)}, {args_list}")
+                print(f"num_input_visited:{self._num_input_visited}, params:{len(self._params)}, param_packs:{len(self._param_packs)}")
                 placeholder_name = args_list[
                     self._num_input_visited
                     - len(self._params)

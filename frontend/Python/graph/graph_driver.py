@@ -47,7 +47,7 @@ class GraphDriver:
     output op's result.
     """
 
-    def __init__(self, graph: Graph) -> None:
+    def __init__(self, graph: Graph, parallelism: int = 0) -> None:
         """
         Initialize the GraphDriver object with a given computational graph.
 
@@ -59,6 +59,7 @@ class GraphDriver:
         - None
         """
         self._graph = graph
+        self._parallelism = parallelism
         self._subgraph_dependencies = {
             subgraph_name: set()
             for subgraph_name in list(self._graph.op_groups.keys())
@@ -245,18 +246,17 @@ class GraphDriver:
             print("Error : Graph Partitioning is illegal!")
             return None
         
-        fake_params_offsets = []
-        current_fake_param_offset = 0
-        for tensorMeta in self._graph._fake_params:
-            fake_params_offsets.append(current_fake_param_offset)
-            current_fake_param_offset += functools.reduce(
-                lambda x, y: x * y, list(tensorMeta.shape), 1
-            )
+        # fake_params_offsets = []
+        # current_fake_param_offset = 0
+        # for tensorMeta in self._graph._fake_params:
+        #     fake_params_offsets.append(current_fake_param_offset)
+        #     current_fake_param_offset += functools.reduce(
+        #         lambda x, y: x * y, list(tensorMeta.shape), 1
+        #     )
 
         # 为每个子图创建一个FuncOp节点，并将这些节点添加到主图中。
         # Adding FuncOp nodes for each subgraph
         inputs0 = self._graph._inputs
-        print(inputs0[0].shape)
         for i, subgraph_name in enumerate(self._subgraphs.keys()):
             print(f"----------------------------This is {i}th test----------------------------------")
             main_graph_name = "forward{}".format(i)
@@ -288,11 +288,12 @@ class GraphDriver:
             for op in self._graph.body:
                 if isinstance(op, PlaceholderOp) :
                     if op.name in self._subgraphs_inputs[subgraph_name]:
-                        if(len(fake_params_offsets) > (ph_count)):
+                        if(len(self._graph._fake_params) > (ph_count)):
                             main_graph._fake_params.append(self._graph._fake_params[ph_count])
-                            current_fake_params_offsets.append(fake_params_offsets[ph_count])
+                            # current_fake_params_offsets.append(fake_params_offsets[ph_count])
                         main_graph.add_node(op) 
                     ph_count += 1
+            print(f"node_table : {main_graph.node_table}")
 
             # Identify inputs for each subgraph
             maingraph_input = inputs0
@@ -336,11 +337,11 @@ class GraphDriver:
 
             # Adding GetItemOps to retrieve individual output tensors
             output_node = OutputOp()
-            for i, output in enumerate(self._subgraphs_outputs[subgraph_name]):
+            for m, output in enumerate(self._subgraphs_outputs[subgraph_name]):
                 getitem_node = GetItemOp()
                 getitem_node.add_argument(call_node.name)
-                getitem_node.add_argument(i)
-                getitem_node.name = "getitem{}".format(i)
+                getitem_node.add_argument(m)
+                getitem_node.name = "getitem{}".format(m)
                 output_node.add_argument(getitem_node.name)
                 main_graph.add_node(getitem_node)
             # Marking the final output of the main graph
@@ -358,10 +359,12 @@ class GraphDriver:
                     main_graph._ops_registry,
                     do_param_pack,
                 )
-                main_importer._param_pack_offsets = current_fake_params_offsets
+                # main_importer._param_pack_offsets = current_fake_params_offsets
                 # main_importer._symbol_table = current_symbol_table
                 self._modules[main_graph_name] = main_importer.import_main_graph()
+                if (i == 1):
+                    return self._modules
                 inputs0 = []
                 # current_symbol_table = {**current_symbol_table, **(main_importer._symbol_table_output)}
                 # node_table = {**node_table, **(main_graph.node_table)} 
-                # return main_importer.import_main_graph()
+                
