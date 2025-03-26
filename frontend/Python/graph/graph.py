@@ -683,7 +683,6 @@ class GraphImporter:
         Returns:
         None
         """
-        print(f"num_input_visited:{self._num_input_visited}")
         if self._num_input_visited < len(self._params) and self._do_param_pack:
             dtype = node.tensor_meta["dtype"]
             pack_of_dtype = None
@@ -702,8 +701,6 @@ class GraphImporter:
             )
         elif self._do_param_pack:
             if len(self._params) > 0:
-                print(f"args_list:{len(args_list)}, {args_list}")
-                print(f"num_input_visited:{self._num_input_visited}, params:{len(self._params)}, param_packs:{len(self._param_packs)}")
                 placeholder_name = args_list[
                     self._num_input_visited
                     - len(self._params)

@@ -72,6 +72,8 @@ class GraphDriver:
         ) = self.build_subgraph_by_group()
         self._maingraphs = {}
         self._modules = {}
+        # 新增：子图参数索引表 {子图名: 参数索引列表}
+        self._subgraph_param_indices = defaultdict(list) 
 
     @property
     def subgraphs(self):
@@ -84,6 +86,10 @@ class GraphDriver:
     @property
     def modules(self):
         return list(self._modules.values())
+    
+    @property
+    def subgraph_param_indices(self):
+       return list(self._subgraph_param_indices.values())
     
     def build_subgraph_by_group(self):
         """
@@ -260,7 +266,7 @@ class GraphDriver:
         for i, subgraph_name in enumerate(self._subgraphs.keys()):
             print(f"----------------------------This is {i}th test----------------------------------")
             main_graph_name = "forward{}".format(i)
-            current_fake_params_offsets = []
+            current_param_indices = [] # 存储参数索引的列表
             main_graph = Graph(
                 [],
                 [],
@@ -290,9 +296,11 @@ class GraphDriver:
                     if op.name in self._subgraphs_inputs[subgraph_name]:
                         if(len(self._graph._fake_params) > (ph_count)):
                             main_graph._fake_params.append(self._graph._fake_params[ph_count])
+                            current_param_indices.append(ph_count)  # 记录参数索引
                             # current_fake_params_offsets.append(fake_params_offsets[ph_count])
                         main_graph.add_node(op) 
                     ph_count += 1
+            self._subgraph_param_indices[subgraph_name] = current_param_indices
             print(f"node_table : {main_graph.node_table}")
 
             # Identify inputs for each subgraph
@@ -362,8 +370,8 @@ class GraphDriver:
                 # main_importer._param_pack_offsets = current_fake_params_offsets
                 # main_importer._symbol_table = current_symbol_table
                 self._modules[main_graph_name] = main_importer.import_main_graph()
-                if (i == 1):
-                    return self._modules
+                # if (i == 1):
+                #     return self._modules
                 inputs0 = []
                 # current_symbol_table = {**current_symbol_table, **(main_importer._symbol_table_output)}
                 # node_table = {**node_table, **(main_graph.node_table)} 

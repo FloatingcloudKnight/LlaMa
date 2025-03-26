@@ -118,17 +118,33 @@ for i in range(len(driver.subgraphs)):
 driver.construct_main_graph(True)
 # Save the generated files to the specified output directory.
 for i in range(len(driver.subgraphs)): 
-    with open(os.path.join(output_dir, f"subgraph{i}.mlir"), "w") as module_file:
-        print(driver.subgraphs[i]._imported_module, file=module_file)
-    with open(os.path.join(output_dir, f"forward{i}.mlir"), "w") as module_file:
-        print(driver.modules[i], file=module_file)
+    # with open(os.path.join(output_dir, f"subgraph{i}.mlir"), "w") as module_file:
+    #     print(driver.subgraphs[i]._imported_module, file=module_file)
+    # with open(os.path.join(output_dir, f"forward{i}.mlir"), "w") as module_file:
+    #     print(driver.modules[i], file=module_file)
+
+    # 从 GraphDriver 中获取该子图收集到的参数索引列表
+    param_indices = driver.subgraph_param_indices[i]
+
+     # 根据参数索引从 loaded_params 中提取参数，并拼接为一维数组
+    selected_arrays = []
+    for idx in param_indices:
+        # 注意：loaded_params 中的每个参数都是一个 tensor
+        arr = params[idx].detach().cpu().numpy().reshape(-1)
+        selected_arrays.append(arr)
+    
+    if selected_arrays:
+        concat_arr = numpy.concatenate(selected_arrays)
+    else:
+        concat_arr = numpy.array([])
+
+    # 定义输出文件名，数字 i 与子图对应
+    filename = os.path.join(output_dir, f"arg{i}.data")
+    concat_arr.tofile(filename)
+
 # with open(os.path.join(output_dir, f"forward0.mlir"), "w") as module_file:
 #         print(driver.maingraphs[0], file=module_file)
 # with open(os.path.join(output_dir, f"forward1.mlir"), "w") as module_file:
 #         print(driver.maingraphs[1], file=module_file)
 # for main_graph in driver.maingraphs:
 #     print(f"main_graph: {main_graph.body}.")
-all_param = numpy.concatenate(
-    [param.detach().numpy().reshape([-1]) for param in params]
-)
-all_param.tofile(os.path.join(output_dir, "arg0.data"))
