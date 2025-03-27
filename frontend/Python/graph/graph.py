@@ -244,13 +244,38 @@ class Graph:
         Returns:
         - None
         """
+        submodel_count = 0
+        tsf_count = 0
         for i, op in enumerate(self._body):
             if isinstance(op, PlaceholderOp) or isinstance(op, OutputOp):
                 continue
-            group = [op]
-            subgraph_name = "subgraph{}".format(i)
-            self.group_map_device[subgraph_name] = DeviceType.CPU
+            
+            if "subgraph{}".format(submodel_count) not in self.op_groups.keys():
+                group = [op]
+                subgraph_name = "subgraph{}".format(submodel_count)
+                self.group_map_device[subgraph_name] = DeviceType.CPU
+                self.op_groups[subgraph_name] = group
+                continue
+            
+            # todo: Added handling of more complex embedding cases
+
+            if isinstance(op, PowOp): 
+                if tsf_count%2 == 0:
+                    submodel_count += 1
+                    tsf_count += 1
+                    group = [op]
+                    subgraph_name = "subgraph{}".format(submodel_count)
+                    self.group_map_device[subgraph_name] = DeviceType.CPU
+                    self.op_groups[subgraph_name] = group
+                    continue
+                else:
+                    tsf_count += 1
+
+            subgraph_name = "subgraph{}".format(submodel_count)
+            group = self.op_groups[subgraph_name]
+            group.append(op)
             self.op_groups[subgraph_name] = group
+            
 
     def fuse_ops(self, pattern_list: List[FunctionType]):
         """
@@ -286,7 +311,7 @@ class Graph:
         for transform_func in func_list:
             transform_func(self)
 
-    def lower_to_top_level_ir(self):
+    def lower_to_top_level_ir(self, num : int = 0):
         """
         Lowers the graph to top-level MLIR dialects.
 
@@ -314,6 +339,8 @@ class Graph:
                 verbose=self._verbose,
             )
             self._imported_module = fx_importer.import_graph()
+            # if num == 1:
+            #     fx_importer.partition_symbol_table()
             outputs = fx_importer.get_output_nodes()
         self._output_memref = []
         output_ranks = []
@@ -439,6 +466,7 @@ class GraphImporter:
         if ops_registry is None:
             ops_registry = {}
         self._symbol_table = {}
+        self._symbol_table_output = {}
         self._body = body
         self._device = device
         self._func_name = func_name
@@ -507,6 +535,17 @@ class GraphImporter:
             self._param_packs.append(
                 ir.MemRefType.get([param_total_size], mlir_dtype)
             )
+
+    def addsymbol(self) -> None:
+        """
+        Slice the symbols as required and add them to the symbol table.
+
+        Returns:
+        None
+        """
+        for key, value in self._symbol_table.items():
+            print(f"Key: {key}, Value: {value}")
+            
 
     def import_graph(self) -> ir.Module:
         """
@@ -692,15 +731,19 @@ class GraphImporter:
                     operation, ir.OpView
                 ):
                     self._symbol_table[(str(node.name), i)] = operation.result
+                    self._symbol_table_output[(str(node.name), i)] = operation.result
                 elif isinstance(operation, ir.OpResult):
                     self._symbol_table[(str(node.name), i)] = operation
+                    self._symbol_table_output[(str(node.name), i)] = operation
                 else:
                     raise NotImplementedError
         elif isinstance(op_ret, ir.OpResult):
             self._symbol_table[(str(node.name), 0)] = op_ret
+            self._symbol_table_output[(str(node.name), 0)] = op_ret
         else:
             for i, result in enumerate(op_ret.results):
                 self._symbol_table[(str(node.name), i)] = result
+                self._symbol_table_output[(str(node.name), i)] = result
 
     def get_output_nodes(self):
         """

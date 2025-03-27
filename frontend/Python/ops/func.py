@@ -59,8 +59,13 @@ def call_op(node: CallOp, symbol_table: Dict[Tuple[str, int], ir.Operation]):
     From Buddy CallOp to MLIR FUNC call operation.
     """
     arguments = []
+    # print(f"args: {str(node.args)}")
     for i, arg in enumerate(node.args):
         input_node = symbol_table.get((str(arg), node._args_index[i]))
+        # print(f"symbol_table: {symbol_table}")
+        # print(f"str: {str(arg)}, input_node: {input_node.type}")
+        if input_node is None:
+            raise ValueError(f"Missing symbol entry for key: {(str(arg), node._args_index[i])}")
         memref_type = ir.MemRefType(input_node.type)
         stride = []
         shape = memref_type.shape
