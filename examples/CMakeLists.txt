@@ -12,6 +12,10 @@ if(BUDDY_DIS_LLAMA_EXAMPLES)
   add_subdirectory(LlamaTest)
 endif()
 
+if(BUDDY_HETER_LENET_EXAMPLES)
+  add_subdirectory(HeterLeNet)
+endif()
+
 if(BUDDY_DEEPSEEKR1_EXAMPLES)
   add_subdirectory(BuddyDeepSeekR1)
 endif()
