@@ -46,6 +46,7 @@ config.excludes = [
     'BuddyDeepSeekR1'
     'BuddyResNet18',
     'BuddyGPU',
+    'HeterLeNet',
     'ConvOpt',
     'DAPDialect',
     'DIPDialect',
