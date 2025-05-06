@@ -17,23 +17,21 @@
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <cmath>
-#include <cstdlib>
 #include <iostream>
+#include <string>
 #include <variant>
 #include <vector>
-#include <string>
 
 using namespace buddy;
 
-constexpr size_t ParamsSize0 = 131072064;
-constexpr size_t ParamsSize1 = 202383360;
-constexpr size_t ParamsSize2 = 131076096;
 constexpr size_t MaxVocabSize = 32000;
 constexpr size_t MaxTokenLength = 40;
+constexpr size_t SubMaxTokenLength = 20;
 constexpr size_t HiddenSize = 4096;
 constexpr size_t HiddenSize0 = 128;
 constexpr size_t HiddenSize1 = 41;
@@ -44,7 +42,8 @@ struct MemRefContainer {
   MemRef<float, 3> memRef3D1;
   MemRef<float, 3> memRef3D2;
 
-  MemRefContainer(MemRef<float, 3> m1, MemRef<float, 2> m2, MemRef<float, 3> m3, MemRef<float, 3> m4)
+  MemRefContainer(MemRef<float, 3> m1, MemRef<float, 2> m2, MemRef<float, 3> m3,
+                  MemRef<float, 3> m4)
       : memRef3D0(m1), memRef2D(m2), memRef3D1(m3), memRef3D2(m4) {}
 };
 
@@ -54,21 +53,16 @@ struct MemRefContainer {
 extern "C" void _mlir_ciface_forward0(MemRefContainer *, MemRef<float, 1> *,
                                       Text<size_t, 2> *);
 extern "C" void _mlir_ciface_forward1(MemRef<float, 3> *, MemRef<float, 1> *,
-                                      MemRef<float, 3> *,
-                                      MemRef<float, 3> *,
-                                      MemRef<float, 3> *,
-                                      MemRef<float, 2> *);
-extern "C" void _mlir_ciface_forward33(MemRef<float, 3> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *);
-// extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 1> *,
-//                                       MemRef<float, 3> *);
-// extern "C" void _mlir_ciface_forward4(MemRef<float, 3> *, MemRef<float, 1> *,
-//                                       MemRef<float, 3> *);
-// extern "C" void _mlir_ciface_forward5(MemRef<float, 3> *, MemRef<float, 1> *,
-//                                       MemRef<float, 3> *);
-// -----------------------------------------------------------------------------
-// Helper Functions
-// -----------------------------------------------------------------------------
+extern "C" void _mlir_ciface_forward2(MemRef<float, 2> *, MemRef<float, 1> *,
+                                      MemRef<float, 3> *, MemRef<float, 3> *,
+                                      MemRef<float, 3> *, MemRef<float, 2> *);
+extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 2> *,
+                                      MemRef<float, 3> *);
+extern "C" void _mlir_ciface_forward5(MemRef<float, 2> *, MemRef<float, 1> *,
+                                      MemRef<float, 3> *);
+extern "C" void _mlir_ciface_forward193(MemRef<float, 3> *, MemRef<float, 1> *,
+                                        MemRef<float, 3> *);
 
 /// Capture input message.
 void getUserInput(std::string &inputStr) {
@@ -110,6 +104,7 @@ void loadParameters(const std::string &paramFilePath,
   const auto loadStart = std::chrono::high_resolution_clock::now();
   std::ifstream paramFile(paramFilePath, std::ios::in | std::ios::binary);
   if (!paramFile.is_open()) {
+    std::cout << paramFilePath << std::endl;
     throw std::runtime_error("[Error] Failed to open params file!");
   }
   printLogLabel();
@@ -146,21 +141,51 @@ int main() {
   const std::string title = "LLaMA 2 Inference Powered by Buddy Compiler";
   std::cout << "\033[33;1m" << title << "\033[0m" << std::endl;
 
+  int split_group[] = {
+      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
+      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1,
+      2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2,
+      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
+      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1,
+      2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2,
+      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
+      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1};
+  constexpr size_t param_size_group[] = {
+      131072064, 4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
+      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
+      0,         4096, 67633152, 0, 131076096};
   /// Define directories of vacabulary and parameter file.
   std::string llamaDir = LLAMA_DIS_EXAMPLE_PATH;
   std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
   const std::string vocabDir = llamaDir + "/vocab.txt";
-  // const std::string paramsDir0 = llamaBuildDir + "/arg0.data";
-  // const std::string paramsDir1 = llamaBuildDir + "/arg1.data";
-  // const std::string paramsDir2 = llamaBuildDir + "/arg33.data";
 
-  std::vector<std::string> paramsDirs;  // 用容器存储路径
+  std::vector<std::string> paramsDirs; // 用容器存储路径
 
-  for (int i = 0; i < 34; i++) {  // N 为需要生成的数量
+  for (int i = 0; i < 194; i++) { // N 为需要生成的数量
+    for (int j = 0; j < split_group[i]; j++) {
       // 使用 emplace_back 直接构造字符串，避免拷贝
-      paramsDirs.emplace_back(
-          llamaBuildDir + "/arg" + std::to_string(i) + ".data"
-      );
+      paramsDirs.emplace_back(llamaBuildDir + "/subgraph" + std::to_string(i) +
+                              "_arg" + std::to_string(j) + ".data");
+    }
   }
 
   /// Get user message.
@@ -179,25 +204,41 @@ int main() {
   MemRefContainer resultContainer(myMemRef1, myMemRef2, myMemRef3, myMemRef4);
   MemRefContainer *resultContainerPtr = &resultContainer;
   MemRef<float, 3> resultContainer0({1, MaxTokenLength, HiddenSize});
+  MemRef<float, 3> subResultContainer0({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 3> subResultContainer1({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 3> tmp3DContainer({1, MaxTokenLength, HiddenSize});
+  MemRef<float, 3> sub3DContainer0({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 3> sub3DContainer1({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 2> tmp2DContainer0({MaxTokenLength, HiddenSize});
+  MemRef<float, 2> tmp2DContainer1({MaxTokenLength, HiddenSize});
+  MemRef<float, 2> sub2DContainer0({SubMaxTokenLength, HiddenSize});
+  MemRef<float, 2> sub2DContainer1({SubMaxTokenLength, HiddenSize});
   Text<size_t, 2> inputContainer(inputStr);
   std::vector<MemRef<float, 1>> paramsContainers;
-  MemRef<float, 1> paramsContainer0({ParamsSize0});
-  for(int i = 0; i < 32; i++){
-    MemRef<float, 1> paramsContainer1({ParamsSize1});
-    paramsContainers.push_back(paramsContainer1);
-  }
-  MemRef<float, 1> paramsContainer2({ParamsSize2});
+
   /// Fill data into containers
   //  - Input: register vocabulary and tokenize the input string.
   //  - Output: register vocabulary.
   //  - Parameters: load parameters from the `arg0` file into the container.
   tokenizeInput(vocabDir, inputContainer);
   outputContainer.loadVocab(vocabDir);
+
+  MemRef<float, 1> paramsContainer0({param_size_group[0]});
   loadParameters(paramsDirs[0], paramsContainer0);
-  for(int i = 0; i < 32; i++){
-    loadParameters(paramsDirs[i+1], paramsContainers[i]);
+  int params_count = 1;
+  for (int i = 1; i < 193; i++) {
+    for (int j = 0; j < split_group[i]; j++) {
+      if (param_size_group[i] > 0) {
+        MemRef<float, 1> paramsContainer1({param_size_group[i]});
+        loadParameters(paramsDirs[params_count], paramsContainer1);
+        paramsContainers.push_back(paramsContainer1);
+      }
+      params_count++;
+    }
   }
-  loadParameters(paramsDirs[33], paramsContainer2);
+  MemRef<float, 1> paramsContainer2({param_size_group[193]});
+  loadParameters(paramsDirs[params_count], paramsContainer2);
+
   /// Run LLaMA Inference
   //  - Perform the forward function.
   //  - Find and append the generated token.
@@ -210,16 +251,58 @@ int main() {
   for (int i = 0; i < generateLen; i++) {
     const auto inferenceStart = std::chrono::high_resolution_clock::now();
     // Execute the forward pass of the model.
-    _mlir_ciface_forward0(resultContainerPtr, &paramsContainer0, &inputContainer);
+
+    _mlir_ciface_forward0(resultContainerPtr, &paramsContainer0,
+                          &inputContainer);
     resultContainer0 = resultContainerPtr->memRef3D0;
     auto resultContainer1 = resultContainerPtr->memRef2D;
     auto resultContainer2 = resultContainerPtr->memRef3D1;
     auto resultContainer3 = resultContainerPtr->memRef3D2;
-    _mlir_ciface_forward1(&resultContainer0, &paramsContainers[0], &resultContainer0, &resultContainer2, &resultContainer3, &resultContainer1);
-    for(int m = 1; m < 32; m++){
-      _mlir_ciface_forward1(&resultContainer0, &paramsContainers[m], &resultContainer0, &resultContainer2, &resultContainer3, &resultContainer1);
+    resultContainer0.splitMemRef(std::move(resultContainer0),
+                                 subResultContainer0, subResultContainer1, 1,
+                                 20);
+    for (int m = 0; m < 32; m++) {
+      _mlir_ciface_forward1(&sub3DContainer0, &paramsContainers[m * 6],
+                            &subResultContainer0);
+      _mlir_ciface_forward1(&sub3DContainer1, &paramsContainers[m * 6],
+                            &subResultContainer1);
+      tmp3DContainer.concatenateMemRefs(sub3DContainer0, sub3DContainer1,
+                                        tmp3DContainer, 1);
+      _mlir_ciface_forward2(&tmp2DContainer0, &paramsContainers[m * 6 + 1],
+                            &tmp3DContainer, &resultContainer2,
+                            &resultContainer3, &resultContainer1);
+      _mlir_ciface_forward2(&tmp2DContainer1, &paramsContainers[m * 6 + 2],
+                            &tmp3DContainer, &resultContainer2,
+                            &resultContainer3, &resultContainer1);
+      tmp2DContainer0.addMemRef(tmp2DContainer0, tmp2DContainer1);
+      tmp2DContainer0.splitMemRef(std::move(tmp2DContainer0), sub2DContainer0,
+                                  sub2DContainer1, 0, 20);
+      _mlir_ciface_forward3(&subResultContainer0, &sub2DContainer0,
+                            &subResultContainer0);
+      _mlir_ciface_forward3(&subResultContainer1, &sub2DContainer1,
+                            &subResultContainer1);
+      _mlir_ciface_forward1(&sub3DContainer0, &paramsContainers[m * 6 + 3],
+                            &subResultContainer0);
+      _mlir_ciface_forward1(&sub3DContainer1, &paramsContainers[m * 6 + 3],
+                            &subResultContainer1);
+      tmp3DContainer.concatenateMemRefs(sub3DContainer0, sub3DContainer1,
+                                        tmp3DContainer, 1);
+      _mlir_ciface_forward5(&tmp2DContainer0, &paramsContainers[m * 6 + 4],
+                            &tmp3DContainer);
+      _mlir_ciface_forward5(&tmp2DContainer1, &paramsContainers[m * 6 + 5],
+                            &tmp3DContainer);
+      tmp2DContainer0.addMemRef(tmp2DContainer0, tmp2DContainer1);
+      tmp2DContainer0.splitMemRef(std::move(tmp2DContainer0), sub2DContainer0,
+                                  sub2DContainer1, 0, 20);
+      _mlir_ciface_forward3(&subResultContainer0, &sub2DContainer0,
+                            &subResultContainer0);
+      _mlir_ciface_forward3(&subResultContainer1, &sub2DContainer1,
+                            &subResultContainer1);
     }
-    _mlir_ciface_forward33(&resultContainer0, &paramsContainer2, &resultContainer0);
+    tmp3DContainer.concatenateMemRefs(subResultContainer0, subResultContainer1,
+                                      tmp3DContainer, 1);
+    _mlir_ciface_forward193(&resultContainer0, &paramsContainer2,
+                            &tmp3DContainer);
 
     const auto inferenceEnd = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::milli> inferenceTime =
@@ -243,12 +326,13 @@ int main() {
     // Append the generated token into the input and output container.
     inputContainer.appendTokenIdx(maxIndex);
     outputContainer.appendTokenIdx(maxIndex);
-    
+
     free(myMemRef1.release());
     free(myMemRef2.release());
     free(myMemRef3.release());
     free(myMemRef4.release());
-    free(resultContainer0.release());
+    // free(resultContainer0.release());
+    // free(tmp3DContainer.release());
   }
 
   /// Print the final result

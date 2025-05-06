@@ -4,3 +4,5 @@ vocab.txt
 
 # model mlir file
 *.mlir
+*.cpp
+*.h

@@ -23,6 +23,7 @@ from types import FunctionType
 import ctypes
 import functools
 import numpy as np
+import torch
 
 import mlir.ir as ir
 import mlir.dialects.func as func
@@ -123,6 +124,7 @@ class Graph:
         """
         self._body = []
         self._inputs = inputs
+        self._outputs = None
         self.node_table: Dict[str, Op] = {}
         self._fake_params = fake_params
         self.device = device
@@ -134,8 +136,7 @@ class Graph:
         self._output_memref = None
         self._output_descriptor = None
         self.execution_engine = None
-        self.op_groups: Dict[str, List[Op]] = {}
-        self.group_map_device: Dict[str, DeviceType] = {}
+        self.paral_group: Dict[str, List[int]] = {}
 
     @property
     def body(self):
@@ -236,46 +237,12 @@ class Graph:
         self._body[self._body.index(node)] = newnode
         self.node_table.pop(node.name)
         self.node_table[newnode.name] = newnode
-
-    def init_op_group(self):
-        """
-        Initializes operation groups within the graph.
-
-        Returns:
-        - None
-        """
-        submodel_count = 0
-        tsf_count = 0
-        for i, op in enumerate(self._body):
-            if isinstance(op, PlaceholderOp) or isinstance(op, OutputOp):
-                continue
-            
-            if "subgraph{}".format(submodel_count) not in self.op_groups.keys():
-                group = [op]
-                subgraph_name = "subgraph{}".format(submodel_count)
-                self.group_map_device[subgraph_name] = DeviceType.CPU
-                self.op_groups[subgraph_name] = group
-                continue
-            
-            # todo: Added handling of more complex embedding cases
-
-            if isinstance(op, PowOp): 
-                if tsf_count%2 == 0:
-                    submodel_count += 1
-                    tsf_count += 1
-                    group = [op]
-                    subgraph_name = "subgraph{}".format(submodel_count)
-                    self.group_map_device[subgraph_name] = DeviceType.CPU
-                    self.op_groups[subgraph_name] = group
-                    continue
-                else:
-                    tsf_count += 1
-
-            subgraph_name = "subgraph{}".format(submodel_count)
-            group = self.op_groups[subgraph_name]
-            group.append(op)
-            self.op_groups[subgraph_name] = group
-            
+    
+    # 检查两个列表对应位置的元素是否为同一类的实例
+    def are_classes_compatible(self, list_a, list_b):
+        if len(list_a) != len(list_b):
+            return False
+        return all(type(a) is type(b) for a, b in zip(list_a, list_b))
 
     def fuse_ops(self, pattern_list: List[FunctionType]):
         """
@@ -342,6 +309,7 @@ class Graph:
             # if num == 1:
             #     fx_importer.partition_symbol_table()
             outputs = fx_importer.get_output_nodes()
+            self._outputs = outputs
         self._output_memref = []
         output_ranks = []
         output_dtypes = []
@@ -507,7 +475,7 @@ class GraphImporter:
             case _:
                 raise NotImplementedError(f"Unsupported dtype {dtype}")
 
-    def _pack_params(self) -> None:
+    def _pack_params(self) -> list:
         """
         Packs parameters of the graph to one memref.
 
@@ -535,16 +503,6 @@ class GraphImporter:
             self._param_packs.append(
                 ir.MemRefType.get([param_total_size], mlir_dtype)
             )
-
-    def addsymbol(self) -> None:
-        """
-        Slice the symbols as required and add them to the symbol table.
-
-        Returns:
-        None
-        """
-        for key, value in self._symbol_table.items():
-            print(f"Key: {key}, Value: {value}")
             
 
     def import_graph(self) -> ir.Module:
@@ -655,6 +613,8 @@ class GraphImporter:
                         ]
                         self._symbol_table[("output", 0)] = returns
                     elif isinstance(node, PlaceholderOp):
+                        if node._newshape is not None:
+                            node.tensor_meta['shape'] = torch.Size(list(node._newshape))
                         self._import_placeholder(node, args_list)
                     elif isinstance(node, GetItemOp):
                         self._symbol_table[(str(node.name), 0)] = (
