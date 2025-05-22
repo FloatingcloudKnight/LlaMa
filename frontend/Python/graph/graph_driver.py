@@ -32,6 +32,9 @@ from .graph import Graph, GraphImporter, TensorMeta
 from .operation import *
 from .type import *
 
+from .operation import *
+from .type import *
+
 
 class GraphDriver:
     """
@@ -47,7 +50,6 @@ class GraphDriver:
     - _subgraphs_outputs (dict): A dictionary mapping subgraph names to their
     output op's result.
     """
-
     def __init__(self, graph: Graph, parallelism: int = 2) -> None:
         """
         Initialize the GraphDriver object with a given computational graph.
@@ -227,6 +229,7 @@ class GraphDriver:
                         if(pos != -1 and pos < len(op_parent_shape)):
                             op_parent_shape[pos] = op_parent_shape[pos] // self._parallelism
                             self._add_paral_op_shape(parent, op_parent_shape)
+
         subgraphs_outputs = {}
         output_node = []
         
@@ -484,6 +487,21 @@ class GraphDriver:
             print("Error : Graph Partitioning is illegal!")
             return None
 
+        # Analysis topology order to sort subgraph call.
+        topo_order = self.topological_sort_subgraph()
+        if topo_order == None:
+            print("Error : Graph Partitioning is illegal!")
+            return None
+        
+        # fake_params_offsets = []
+        # current_fake_param_offset = 0
+        # for tensorMeta in self._graph._fake_params:
+        #     fake_params_offsets.append(current_fake_param_offset)
+        #     current_fake_param_offset += functools.reduce(
+        #         lambda x, y: x * y, list(tensorMeta.shape), 1
+        #     )
+
+        # 为每个子图创建一个FuncOp节点，并将这些节点添加到主图中。
         # Adding FuncOp nodes for each subgraph
         inputs0 = self._graph._inputs
         split_group = []
@@ -498,7 +516,6 @@ class GraphDriver:
                 main_graph_name,
                 self._graph._verbose,
             )
-
             # 为每个子图创建一个FuncOp节点，并将这些节点添加到对应主图中。
             # FuncOp节点代表每个子图，用于主图对子图的调用
             func_node = FuncOp()

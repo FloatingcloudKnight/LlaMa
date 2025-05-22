@@ -505,6 +505,17 @@ class GraphImporter:
             )
             
 
+    def addsymbol(self) -> None:
+        """
+        Slice the symbols as required and add them to the symbol table.
+
+        Returns:
+        None
+        """
+        for key, value in self._symbol_table.items():
+            print(f"Key: {key}, Value: {value}")
+            
+
     def import_graph(self) -> ir.Module:
         """
         Imports buddy graph and generates an MLIR module in high-level dialects.
