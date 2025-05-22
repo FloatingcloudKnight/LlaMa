@@ -59,8 +59,7 @@ $ cmake -G Ninja .. \
     -DLLVM_ENABLE_ASSERTIONS=ON \
     -DCMAKE_BUILD_TYPE=RELEASE \
     -DBUDDY_MLIR_ENABLE_PYTHON_PACKAGES=ON \
-    -DPython3_EXECUTABLE=$(which python3) \
-    -DBUDDY_DIS_LLAMA_EXAMPLES=ON
+    -DPython3_EXECUTABLE=$(which python3) 
 $ ninja
 $ ninja check-buddy
 ```
@@ -82,9 +81,14 @@ $ export PYTHONPATH=${LLVM_MLIR_BUILD_DIR}/tools/mlir/python_packages/mlir_core:
 
 ```
 $ cmake -G Ninja .. -DBUDDY_SPLIT_LLAMA_EXAMPLES=ON
-$ ninja buddy-split-llama-run
+$ ninja buddy-llama-xxxx-run
+// For example: 
+$ ninja buddy-llama-input-run
+
 $ cd bin
 $ ./buddy-dis-llama-run
+// For example: 
+$ ./buddy-llama-input-run
 ```
 This build will spend a few minutes. We recommend you to use better cpu such as server-level cpu to run buddy-llama-run.
 
