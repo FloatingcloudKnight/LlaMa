@@ -103,6 +103,7 @@ params = dynamo_compiler.imported_params[graph]
 driver = GraphDriver(graphs[0])
 for i in range(len(driver.subgraphs)):
     driver.subgraphs[i].lower_to_top_level_ir()
+
 driver.construct_main_graph(True)
 # Save the generated files to the specified output directory.
 for i in range(len(driver.subgraphs)): 

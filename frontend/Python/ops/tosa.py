@@ -428,14 +428,20 @@ def reshape_op(node: ReshapeOp, symbol_table):
     shape will be inferred automatically.
     """
     input1 = symbol_table.get((str(node.args[0]), 0))
-    new_shape = []
-    for i in node.args[1]:
-        new_shape.append(i)
+    input1_shape = ir.RankedTensorType(input1.type).shape
+    
     total_size = 1
-    now_shape = ir.RankedTensorType(input1.type).shape
-    for dim_siz in now_shape:
+    for dim_siz in input1_shape:
         total_size *= dim_siz
 
+    new_shape = []
+    if node._newshape is None:
+        for i in node.args[1]:
+            new_shape.append(i)
+    else: 
+        for i in node._newshape:
+            new_shape.append(i)
+    
     neg_one_cnt = 0
     rest_size = 1
     for dim_siz in new_shape:
@@ -691,7 +697,6 @@ def var_mean_op(node: VarMeanOp, symbol_table):
 
           `keepdim` argument is supported. It's handled by the applying a
           `reshape` operation.
-
     """
 
     def mean_dim_op(_input_tensor: ir.Value, _dim) -> ir.Operation:
@@ -1433,7 +1438,8 @@ def sigmoid_op(node: SigmoidOp, symbol_table):
     input1 = symbol_table.get((str(node.args[0]), 0))
     if input1 is None:
         return
-    output_shape = list(node.tensor_meta["shape"])
+    input_shape = ir.RankedTensorType(input1.type).shape
+    output_shape = list(input_shape)
     dtype = node.tensor_meta["dtype"]
     mlir_dtype = mlir_element_type_get(dtype)
     tensor_type = ir.RankedTensorType.get(output_shape, mlir_dtype)
@@ -1752,15 +1758,15 @@ def scaled_dot_product_flash_attention_for_cpu_op(
     log_sumexp = tosa.AddOp(max_vals.result.type, max_vals, log_op)
     log_weights = tosa.SubOp(add_op.result.type, add_op, log_sumexp)
     softmax_result = math.ExpOp(log_weights)
-    log_sumexp = tosa.ReshapeOp(
-        log_sumexp,
-        memoryview(
-            array.array(
-                "i",
-                output_shape[1],
-            )
-        ),
-    )
+    # log_sumexp = tosa.ReshapeOp(
+    #     log_sumexp,
+    #     memoryview(
+    #         array.array(
+    #             "i",
+    #             output_shape[1],
+    #         )
+    #     ),
+    # )
 
     # This step includes dropout during training.
     # Multiply the result by the value tensor.
@@ -1792,8 +1798,8 @@ def scaled_dot_product_flash_attention_for_cpu_op(
             )
         ),
     )
-
-    return result_reshape_op, log_sumexp
+    return result_reshape_op
+    # return result_reshape_op, log_sumexp
 
 
 ops_registry = {

@@ -45,7 +45,7 @@ class TensorDType(Enum):
     Bool = "bool"
 
 
-class TensorMeta:
+class TensorMeta(dict):
     """
     Store tensor metadata, including shape and data type, while overlooking raw 
     data.
@@ -65,8 +65,8 @@ class TensorMeta:
     meta = TensorMeta(shape=(3, 4), dtype='float32')
     # Access metadata attributes: meta.shape, meta.dtype
     """
-
-    def __init__(self, shape, dtype) -> None:
+    # 修复无法正确构造一个 TensorMeta 实例的问题，给出shape和dtype参数，构造出一个字典
+    def __init__(self, shape, dtype):
         """
         Initialize a new instance of the TensorMeta class.
 
@@ -76,8 +76,27 @@ class TensorMeta:
         - dtype: str
             Represents the data type of the tensor.
         """
-        self.shape = shape
-        self.dtype = dtype
+        super().__init__(shape=shape, dtype=dtype)
+
+    @property
+    def shape(self):
+        """直接通过属性访问 shape"""
+        return self["shape"]
+    
+    @shape.setter
+    def shape(self, value):
+        """设置 shape 时会同步更新字典中的值"""
+        self["shape"] = value
+    
+    @property
+    def dtype(self):
+        """直接通过属性访问 dtype"""
+        return self["dtype"]
+    
+    @dtype.setter
+    def dtype(self, value):
+        """设置 dtype 时会同步更新字典中的值"""
+        self["dtype"] = value
 
 class DeviceType(Enum):
     """

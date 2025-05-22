@@ -61,7 +61,8 @@ def call_op(node: CallOp, symbol_table: Dict[Tuple[str, int], ir.Operation]):
     arguments = []
     # print(f"args: {str(node.args)}")
     for i, arg in enumerate(node.args):
-        input_node = symbol_table.get((str(arg), node._args_index[i]))
+        key = (str(arg), node._args_index[i])
+        input_node = symbol_table.get(key)
         # print(f"symbol_table: {symbol_table}")
         # print(f"str: {str(arg)}, input_node: {input_node.type}")
         if input_node is None:

@@ -46,6 +46,7 @@ public:
   MemRef(std::vector<size_t> sizes, bool needMalloc, intptr_t offset);
   // Constructor from data.
   MemRef(const T *data, intptr_t sizes[N], intptr_t offset = 0);
+  MemRef(const T *data, std::vector<size_t> sizes, intptr_t offset = 0);
   // Constructor from a unique_ptr, taking over.
   MemRef(std::unique_ptr<T> &uptr, intptr_t sizes[N], intptr_t offset = 0);
   // Copy constructor.
@@ -58,8 +59,16 @@ public:
   MemRef<T, N> &operator=(MemRef<T, N> &&other) noexcept;
   // Desctrutor.
   ~MemRef();
+  // Concat two MemRefs into a MemRef.
+  void concatenateMemRefs(MemRef<T, N> &other0, MemRef<T, N> &other1, MemRef<T, N> &other2, size_t concatDim);
+  // Split a MemRef into two MemRefs.
+  void splitMemRef(MemRef<T, N> &&other0, MemRef<T, N> &other1, MemRef<T, N> &other2, size_t splitDim, size_t splitIndex);
+  // Add two MemRef
+  void addMemRef(MemRef<T, N>& a, MemRef<T, N>& b);
   // Get the data pointer.
   T *getData();
+  // Get the data.
+  std::vector<T> getDataVector();
   // Get the sizes (shape).
   const intptr_t *getSizes() { return sizes; }
   // Get the strides.
@@ -177,6 +186,24 @@ MemRef<T, N>::MemRef(const T *data, intptr_t sizes[N], intptr_t offset) {
   }
   setStrides();
   size_t size = product(sizes);
+  allocated = (T *)malloc(sizeof(T) * size);
+  aligned = allocated;
+  for (size_t i = 0; i < size; i++) {
+    aligned[i] = data[i];
+  }
+}
+
+template <typename T, std::size_t N>
+MemRef<T, N>::MemRef(const T *data, std::vector<size_t> sizes, intptr_t offset) {
+  if (sizes.size() != N) {
+    throw std::runtime_error("Invalid number of dimensions.");
+  }
+  this->offset = offset;
+  for (size_t i = 0; i < N; i++) {
+    this->sizes[i] = sizes[i];
+  }
+  setStrides();
+  size_t size = product(this->sizes);
   allocated = (T *)malloc(sizeof(T) * size);
   aligned = allocated;
   for (size_t i = 0; i < size; i++) {
@@ -352,6 +379,153 @@ template <typename T, size_t N> T *MemRef<T, N>::release() {
   aligned = nullptr;
   allocated = nullptr;
   return temp;
+}
+
+template <typename T, std::size_t N>
+void MemRef<T, N>::concatenateMemRefs(MemRef<T, N> &other0, MemRef<T, N> &other1,
+                                      MemRef<T, N> &other2, size_t concatDim) {
+  // 检查拼接维度是否合法
+  if (concatDim >= N) {
+    throw std::runtime_error("Invalid concatenation dimension.");
+  }
+
+  // 检查非拼接维度的形状是否一致
+  for (size_t i = 0; i < N; i++) {
+    if (i != concatDim && other0.getSizes()[i] != other1.getSizes()[i]) {
+      throw std::runtime_error("Shapes are not compatible for concatenation.");
+    }
+  }
+
+  // 设置 other2 的尺寸
+  intptr_t *sizes2 = const_cast<intptr_t *>(other2.getSizes());
+  for (size_t i = 0; i < N; i++) {
+    if (i == concatDim) {
+      sizes2[i] = other0.getSizes()[i] + other1.getSizes()[i];
+    } else {
+      sizes2[i] = other0.getSizes()[i];
+    }
+  }
+
+  // 设置 other2 的 strides
+  other2.setStrides();
+
+  // 计算拼接维度的偏移量
+  intptr_t concatOffset0 = other0.getStrides()[concatDim] * other0.getSizes()[concatDim];
+  intptr_t concatOffset1 = other1.getStrides()[concatDim] * other1.getSizes()[concatDim];
+
+  // 将 other0 的数据复制到 other2
+  size_t offset0 = 0;
+  size_t offset1 = 0;
+  size_t offset2 = 0;
+  while (offset2 < other2.getSize()) {
+    size_t tmp = 0;
+    while (tmp < concatOffset0) {
+      other2[offset2 + tmp] = other0[offset0 + tmp];
+      tmp++;
+    }
+    offset0 += concatOffset0;
+    offset2 += concatOffset0;
+    tmp = 0;
+    while (tmp < concatOffset1) {
+      other2[offset2 + tmp] = other1[offset1 + tmp];
+      tmp++;
+    }
+    offset1 += concatOffset1;
+    offset2 += concatOffset1;
+  }
+
+  // // 将 other1 的数据复制到 other2
+  // for (size_t i = 0; i < other1.getSize(); i++) {
+  //   // 计算目标索引
+  //   intptr_t targetIndex = i;
+  //   intptr_t stride = 1;
+  //   for (size_t dim = N; dim-- > 0;) {
+  //     intptr_t coord = (i / stride) % other1.getSizes()[dim];
+  //     if (dim == concatDim) {
+  //       coord += concatOffset;
+  //     }
+  //     targetIndex += coord * other2.getStrides()[dim];
+  //     stride *= other1.getSizes()[dim];
+  //   }
+  //   std::cout << "targetIndex: " << targetIndex << std::endl;
+  //   other2[targetIndex] = other1[i];
+  // }
+}
+
+template <typename T, std::size_t N>
+void MemRef<T, N>::splitMemRef(MemRef<T, N> &&other0, MemRef<T, N> &other1,
+                 MemRef<T, N> &other2, size_t splitDim, size_t splitIndex) {
+  // 检查分割维度是否合法
+  if (splitDim >= N) {
+    throw std::runtime_error("Invalid split dimension.");
+  }
+
+  // 检查分割点是否合法
+  if (splitIndex > static_cast<size_t>(other0.getSizes()[splitDim])) {
+    throw std::runtime_error("Split index out of bounds.");
+  }
+
+  // 设置 other1 的尺寸
+  intptr_t *sizes1 = const_cast<intptr_t *>(other1.getSizes());
+  const intptr_t *sizes0 = other0.getSizes();
+  for (size_t i = 0; i < N; i++) {
+    sizes1[i] = sizes0[i];
+  }
+  sizes1[splitDim] = splitIndex;
+
+  // 设置 other2 的尺寸
+  intptr_t *sizes2 = const_cast<intptr_t *>(other2.getSizes());
+  for (size_t i = 0; i < N; i++) {
+    sizes2[i] = sizes0[i];
+  }
+  sizes2[splitDim] = sizes0[splitDim] - splitIndex;
+
+  // 设置 strides
+  other1.setStrides();
+  other2.setStrides();
+
+  // 移动 other0 的资源到 other1
+  other1.allocated = other0.allocated;
+  other1.aligned = other0.aligned;
+  other1.offset = other0.offset;
+
+  // 设置 other2 的 aligned 和 offset
+  other2.allocated = nullptr;
+  other2.aligned = other0.aligned + other1.getSize();
+  other2.offset = other0.offset;
+
+  // 清空 other0 的资源
+  other0.allocated = nullptr;
+  other0.aligned = nullptr;
+}
+
+/// Add two MemRef
+template <typename T, size_t N>
+void MemRef<T, N>::addMemRef(MemRef<T, N>& a, MemRef<T, N>& b) {
+  // 校验输入输出维度一致
+  const intptr_t * aSizes = a.getSizes();
+  const intptr_t * bSizes = b.getSizes();
+  for (size_t i = 0; i < N; i++) {
+    if (aSizes[i] != bSizes[i]) {
+      throw std::runtime_error("Shapes are not compatible for concatenation.");
+    }
+  }
+
+  for (size_t i = 0; i < a.getSize(); i++) {
+    a[i] += b[i];
+  }
+}
+
+/// Get the data.
+template <typename T, std::size_t N>
+std::vector<T> MemRef<T, N>::getDataVector() {
+  size_t size = product(this->sizes);
+  assert((size > 0) && "Invalid container data size.");
+  std::vector<T> dataVector(size);
+  for (size_t i = 0; i < size; i++) {
+    dataVector[i] = aligned[i + offset];
+  }
+  return dataVector;
 }
 
 #endif // FRONTEND_INTERFACES_BUDDY_CORE_CONTAINER

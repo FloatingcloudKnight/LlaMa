@@ -1,0 +1,432 @@
+#ifndef LLAMAAdd_H // 作用：防止llamaAdd.h被重复引用
+#define LLAMAAdd_H
+#include <any>
+#include <boost/asio.hpp>
+#include <buddy/Core/Container.h>
+#include <buddy/LLM/TextContainer.h>
+#include <chrono>
+#include <cmath>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <queue>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <variant>
+#include <vector>
+#include <websocketpp/client.hpp>
+#include <websocketpp/config/asio_no_tls.hpp>
+#include <websocketpp/server.hpp>
+
+using namespace buddy;
+using websocketpp::lib::bind;
+using websocketpp::lib::placeholders::_1;
+using websocketpp::lib::placeholders::_2;
+
+typedef websocketpp::server<websocketpp::config::asio> server;
+typedef websocketpp::client<websocketpp::config::asio> client;
+
+constexpr size_t MaxVocabSize = 32000;
+constexpr size_t MaxTokenLength = 40;
+constexpr size_t SubMaxTokenLength = 20;
+constexpr size_t HiddenSize = 4096;
+constexpr size_t HiddenSize0 = 128;
+constexpr size_t HiddenSize1 = 41;
+
+/// Declare LLaMA forward function.
+extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 2> *,
+                                      MemRef<float, 3> *);
+
+// 共享内存结构（线程安全队列）
+class SharedQueue {
+public:
+  void push_input(const MemRef<float, 3> &data) {
+    std::lock_guard<std::mutex> lock(inputMutex);
+    inputQueue.push(data);
+    input_cv.notify_one();
+  }
+
+  MemRef<float, 3> pop_input() {
+    std::unique_lock<std::mutex> lock(inputMutex);
+    input_cv.wait(lock, [this] { return !inputQueue.empty(); });
+    auto data = inputQueue.front();
+    inputQueue.pop();
+    return data;
+  }
+
+  void push_input0(const MemRef<float, 2> &data) {
+    std::lock_guard<std::mutex> lock(input0Mutex);
+    input0Queue.push(data);
+    input0_cv.notify_one();
+  }
+
+  MemRef<float, 2> pop_input0() {
+    std::unique_lock<std::mutex> lock(input0Mutex);
+    input0_cv.wait(lock, [this] { return !input0Queue.empty(); });
+    auto data = input0Queue.front();
+    input0Queue.pop();
+    return data;
+  }
+
+  void push_input1(const MemRef<float, 2> &data) {
+    std::lock_guard<std::mutex> lock(input1Mutex);
+    input1Queue.push(data);
+    input1_cv.notify_one();
+  }
+
+  MemRef<float, 2> pop_input1() {
+    std::unique_lock<std::mutex> lock(input1Mutex);
+    input1_cv.wait(lock, [this] { return !input1Queue.empty(); });
+    auto data = input1Queue.front();
+    input1Queue.pop();
+    return data;
+  }
+
+  void push_output(const MemRef<float, 3> &data) {
+    std::lock_guard<std::mutex> lock(outputMutex);
+    outputQueue.push(data);
+    output_cv.notify_one();
+  }
+
+  MemRef<float, 3> pop_output() {
+    std::unique_lock<std::mutex> lock(outputMutex);
+    output_cv.wait(lock, [this] { return !outputQueue.empty(); });
+    auto data = outputQueue.front();
+    outputQueue.pop();
+    return data;
+  }
+
+private:
+  std::queue<MemRef<float, 3>> inputQueue;
+  std::queue<MemRef<float, 2>> input0Queue;
+  std::queue<MemRef<float, 2>> input1Queue;
+  std::queue<MemRef<float, 3>> outputQueue;
+  std::mutex inputMutex;
+  std::mutex input0Mutex;
+  std::mutex input1Mutex;
+  std::mutex outputMutex;
+  std::condition_variable input_cv;
+  std::condition_variable input0_cv;
+  std::condition_variable input1_cv;
+  std::condition_variable output_cv;
+};
+
+//--------------------- AddMess (主线程) ---------------------
+class AddMess {
+public:
+  AddMess(const std::string name, bool isLast, SharedQueue &queue,
+          const uint16_t &port, const std::string &uri0,
+          const std::string &uri1, const std::string &uri2,
+          const std::string &uri3)
+      : addServer(), name(name), sharedQueue(queue), hdlsSymbol(),
+        isLast(isLast),
+        resultContainer(MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize})) {
+    /// 服务器初始化
+    addServer.set_access_channels(websocketpp::log::alevel::none);
+    addServer.clear_access_channels(websocketpp::log::alevel::all);
+    addServer.init_asio();
+
+    // addServer.set_close_handler([this](websocketpp::connection_hdl hdl) {
+    //   std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+    //   auto it = connections.find(hdl);
+    //   if (it != connections.end()) {
+    //     std::string user_id = it->second;
+    //     hdlsSymbol.erase(user_id);
+    //     connections.erase(hdl);
+    //   }
+    // });
+
+    addServer.set_message_handler(
+        bind(&AddMess::on_server_message, this, _1, _2));
+    addServer.listen(port);
+    addServer.set_reuse_addr(true);
+    addServer.start_accept();
+
+    /// 客户端初始化
+    rmsClient.set_access_channels(websocketpp::log::alevel::none);
+    rmsClient.clear_access_channels(websocketpp::log::alevel::all);
+    rmsClient.init_asio();
+    rmsClient.set_open_handler([this, name](websocketpp::connection_hdl hdl) {
+      mhaClient.send(hdl, name, websocketpp::frame::opcode::text);
+    });
+    rmsClient.set_message_handler(
+        bind(&AddMess::on_rmsClient_message, this, _1, _2));
+    websocketpp::lib::error_code rmsec;
+    auto rmscon = rmsClient.get_connection(uri0, rmsec);
+    rmsClient.connect(rmscon);
+
+    mhaClient.set_access_channels(websocketpp::log::alevel::none);
+    mhaClient.clear_access_channels(websocketpp::log::alevel::all);
+    mhaClient.init_asio();
+    mhaClient.set_open_handler([this, name](websocketpp::connection_hdl hdl) {
+      mhaClient.send(hdl, name, websocketpp::frame::opcode::text);
+    });
+    mhaClient.set_message_handler(
+        bind(&AddMess::on_mhaClient_message, this, _1, _2));
+    websocketpp::lib::error_code mhaec;
+    auto mhacon = mhaClient.get_connection(uri1, mhaec);
+    mhaClient.connect(mhacon);
+
+    mhaClient0.set_access_channels(websocketpp::log::alevel::none);
+    mhaClient0.clear_access_channels(websocketpp::log::alevel::all);
+    mhaClient0.init_asio();
+    mhaClient0.set_open_handler([this, name](websocketpp::connection_hdl hdl) {
+      mhaClient0.send(hdl, name, websocketpp::frame::opcode::text);
+    });
+    mhaClient0.set_message_handler(
+        bind(&AddMess::on_mhaClient0_message, this, _1, _2));
+    websocketpp::lib::error_code mhaec0;
+    auto mhacon0 = mhaClient0.get_connection(uri2, mhaec0);
+    mhaClient0.connect(mhacon0);
+
+    if (isLast) {
+      rmsClient0.set_access_channels(websocketpp::log::alevel::none);
+      rmsClient0.clear_access_channels(websocketpp::log::alevel::all);
+      rmsClient0.init_asio();
+      rmsClient0.set_open_handler([this](websocketpp::connection_hdl hdl) {
+        rmsClient0.send(hdl, "LastAdd", websocketpp::frame::opcode::text);
+        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+        hdlsSymbol["FirstRMS"] = hdl;
+        connections[hdl] = "FirstRMS";
+        std::cout << "已连接到RMSServer" << std::endl;
+      });
+      websocketpp::lib::error_code rmsec0;
+      auto rmscon0 = rmsClient0.get_connection(uri3, rmsec0);
+      rmsClient0.connect(rmscon0);
+    }
+  }
+
+  void run() {
+    std::thread rmsClient_thread([this]() { rmsClient.run(); });
+    std::thread mhaClient_thread([this]() { mhaClient.run(); });
+    std::thread mhaClient0_thread([this]() { mhaClient0.run(); });
+    // 启动 WebSocket 服务器线程
+    std::thread server_thread([this]() { addServer.run(); });
+    std::thread rmsClient0_thread;
+
+    // 新增：启动输出监听线程，向OutputMess和RMSMess发送数据
+    std::thread output_thread([this]() {
+      while (true) {
+        resultContainer = sharedQueue.pop_output();
+        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+        if (isLast) {
+          if (tfCount == 31) {
+            auto it = hdlsSymbol.find("OutputMess");
+            if (it != hdlsSymbol.end()) {
+              send_data(hdlsSymbol["OutputMess"], dataId++,
+                        {resultContainer.getDataVector()});
+              tfCount = 0;
+              std::cout << "一次Token推理完成." << std::endl;
+            } else {
+              std::cout << "OutputMess未连接, 转发失败" << std::endl;
+            }
+          } else if (tfCount < 31) {
+            auto it = hdlsSymbol.find("FirstRMS");
+            if (it != hdlsSymbol.end()) {
+              send_data(hdlsSymbol["FirstRMS"], dataId++,
+                        {resultContainer.getDataVector()});
+              tfCount++;
+              std::cout << "第" << tfCount << "次transformer层推理完成."
+                        << std::endl;
+            } else {
+              std::cout << "未连接FirstRMS, 转发失败" << std::endl;
+            }
+          } else {
+            std::cout << "transformer层推理次数过多" << std::endl;
+          }
+        } else {
+          auto it = hdlsSymbol.find("RMSMess");
+          if (it != hdlsSymbol.end()) {
+            send_data(hdlsSymbol["RMSMess"], dataId++,
+                      {resultContainer.getDataVector()});
+            std::cout << "转发成功 " << std::endl;
+          } else {
+            std::cout << "RMSMess未连接, 转发失败" << std::endl;
+          }
+        }
+      }
+    });
+    if (isLast) {
+      rmsClient0_thread = std::thread([this]() { rmsClient0.run(); });
+    }
+    rmsClient_thread.join();
+    mhaClient_thread.join();
+    mhaClient0_thread.join();
+    server_thread.join();
+    output_thread.join();
+    rmsClient0_thread.join();
+  }
+
+private:
+  server addServer;
+  client rmsClient;
+  client rmsClient0;
+  client mhaClient;
+  client mhaClient0;
+  const std::string name;
+  SharedQueue &sharedQueue;
+  std::map<std::string, websocketpp::connection_hdl> hdlsSymbol;
+  std::map<websocketpp::connection_hdl, std::string,
+           std::owner_less<websocketpp::connection_hdl>>
+      connections;
+  websocketpp::connection_hdl firstRMSHdl;
+  std::mutex symbolMutex; // 保护 hdlsSymbol 的互斥锁
+  MemRef<float, 3> resultContainer;
+  // 确保对dataId的操作是​​原子​​的
+  std::atomic<uint32_t> dataId = 0;
+  std::mutex dataMutex;
+  // 记录已经进行过的Transformer层计算次数
+  uint32_t tfCount = 0;
+  // 是否是最后一个add模块
+  bool isLast;
+
+  void send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
+                 const std::vector<std::vector<float>> &data) {
+    const uint8_t total = data.size();
+    if (addServer.get_con_from_hdl(hdl)->get_state() !=
+        websocketpp::session::state::open)
+      return;
+
+    for (uint8_t i = 0; i < total; ++i) {
+      const auto &subdata = data[i];
+
+      // 构造协议头
+      std::vector<uint8_t> packet(10); // 4+1+1+2=8字节头
+      memcpy(packet.data(), &dataId, 4);
+      packet[4] = total;
+      packet[5] = i;
+      uint32_t num = subdata.size();
+      memcpy(packet.data() + 6, &num, 4);
+
+      // 添加浮点数据
+      const uint8_t *binaryData =
+          reinterpret_cast<const uint8_t *>(subdata.data());
+      packet.insert(packet.end(), binaryData,
+                    binaryData + subdata.size() * sizeof(float));
+
+      addServer.send(hdl, packet.data(), packet.size(),
+                     websocketpp::frame::opcode::binary);
+    }
+  }
+
+  void on_server_message(websocketpp::connection_hdl hdl,
+                         server::message_ptr msg) {
+    std::string payload = msg->get_payload();
+    if (payload.find("RMSMess") != std::string::npos) {
+      std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+      hdlsSymbol["RMSMess"] = hdl;
+      connections[hdl] = payload;
+      std::cout << payload << " 已连接" << std::endl;
+      return;
+    } else if (payload.find("OutputMess") != std::string::npos) {
+      std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+      hdlsSymbol[payload] = hdl;
+      connections[hdl] = payload;
+      std::cout << payload << " 已连接" << std::endl;
+      return;
+    }
+  }
+
+  std::vector<float> getFloatData(client::message_ptr msg) {
+    if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
+      std::cout << "忽略非二进制消息" << std::endl;
+      return {};
+    }
+
+    const std::string &payload = msg->get_payload();
+    if (payload.size() < 10) {
+      std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      return {};
+    }
+
+    // 解析协议头
+    uint32_t batch_id;
+    uint8_t totalChunks, seqChunk;
+    uint32_t num_elements;
+
+    memcpy(&batch_id, payload.data(), 4);
+    totalChunks = payload[4];
+    seqChunk = payload[5];
+    memcpy(&num_elements, payload.data() + 6, 4);
+
+    // 验证分块序号有效性
+    if (seqChunk >= totalChunks) {
+      std::cerr << "错误：非法分块序号 " << (int)seqChunk
+                << " (总块数=" << (int)totalChunks << ")" << std::endl;
+      return {};
+    }
+
+    // 验证数据长度
+    const size_t expectedSize = 10 + num_elements * sizeof(float);
+    if (payload.size() != expectedSize) {
+      std::cerr << "错误：数据长度不匹配(预期=" << expectedSize
+                << " 实际=" << payload.size() << ")" << std::endl;
+      return {};
+    }
+
+    // 提取浮点数据
+    const float *float_data =
+        reinterpret_cast<const float *>(payload.data() + 10);
+    std::vector<float> chunk(float_data, float_data + num_elements);
+    return chunk;
+  }
+
+  void on_mhaClient_message(websocketpp::connection_hdl hdl,
+                            client::message_ptr msg) {
+    std::lock_guard<std::mutex> lock(dataMutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[2] = {SubMaxTokenLength, HiddenSize};
+    MemRef<float, 2> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push_input0(subResultContainer);
+    std::cout << "接收到MHAMess0数据" << std::endl;
+  }
+
+  void on_mhaClient0_message(websocketpp::connection_hdl hdl,
+                             client::message_ptr msg) {
+    std::lock_guard<std::mutex> lock(dataMutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[2] = {SubMaxTokenLength, HiddenSize};
+    MemRef<float, 2> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push_input1(subResultContainer);
+    std::cout << "接收到MHAMess1数据" << std::endl;
+  }
+
+  void on_rmsClient_message(websocketpp::connection_hdl hdl,
+                            client::message_ptr msg) {
+    std::lock_guard<std::mutex> lock(dataMutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
+    MemRef<float, 3> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push_input(subResultContainer);
+    std::cout << "接收到RMSMess数据" << std::endl;
+  }
+};
+
+//--------------------- Comp (子线程) ---------------------
+class Comp {
+public:
+  Comp(SharedQueue &queue) : sharedQueue(queue) {}
+
+  void run() {
+    while (true) {
+      MemRef<float, 2> input1 = sharedQueue.pop_input1();
+      MemRef<float, 3> input2 = sharedQueue.pop_input();
+      MemRef<float, 2> input0 = sharedQueue.pop_input0();
+      input0.addMemRef(input0, input1);
+      MemRef<float, 3> resultContainer({1, SubMaxTokenLength, HiddenSize});
+      _mlir_ciface_forward3(&resultContainer, &input0, &input2);
+      std::cout << "forward3 computed." << std::endl;
+      sharedQueue.push_output(resultContainer);
+    }
+  }
+
+private:
+  SharedQueue &sharedQueue;
+};
+
+#endif // LLAMAAdd_H

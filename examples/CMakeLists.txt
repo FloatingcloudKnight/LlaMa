@@ -12,6 +12,10 @@ if(BUDDY_DIS_LLAMA_EXAMPLES)
   add_subdirectory(LlamaTest)
 endif()
 
+if(BUDDY_SPLIT_LLAMA_EXAMPLES)
+  add_subdirectory(SplitLlama)
+endif()
+
 if(BUDDY_DEEPSEEKR1_EXAMPLES)
   add_subdirectory(BuddyDeepSeekR1)
 endif()
