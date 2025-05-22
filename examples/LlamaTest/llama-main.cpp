@@ -177,7 +177,6 @@ int main() {
   std::string llamaDir = LLAMA_DIS_EXAMPLE_PATH;
   std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
   const std::string vocabDir = llamaDir + "/vocab.txt";
-
   std::vector<std::string> paramsDirs; // 用容器存储路径
 
   for (int i = 0; i < 194; i++) { // N 为需要生成的数量
@@ -331,8 +330,6 @@ int main() {
     free(myMemRef2.release());
     free(myMemRef3.release());
     free(myMemRef4.release());
-    // free(resultContainer0.release());
-    // free(tmp3DContainer.release());
   }
 
   /// Print the final result
