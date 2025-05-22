@@ -1,6 +1,5 @@
 # model params file
 *.data
-vocab.txt
 
 # model mlir file
 *.mlir
