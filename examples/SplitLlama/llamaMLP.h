@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
+#include "BaseDisModel.h"
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -41,61 +42,6 @@ constexpr size_t HiddenSize1 = 41;
 /// Declare LLaMA forward function.
 extern "C" void _mlir_ciface_forward5(MemRef<float, 2> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *);
-
-/// Print [Log] label in bold blue format.
-void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
-
-/// Print information for each iteration.
-void printIterInfo(size_t iterIdx, std::string str, double time) {
-  std::cout << "\033[32;1m[Iteration " << iterIdx << "] \033[0m";
-  std::cout << "Token: " << str << " | "
-            << "Time: " << time << "s" << std::endl;
-}
-
-/// Tokenize input data in the container.
-void tokenizeInput(const std::string &vocabFile,
-                   Text<size_t, 2> &inputContainer) {
-  printLogLabel();
-  std::cout << "Vocab file: " << std::filesystem::canonical(vocabFile)
-            << std::endl;
-  const auto buddyTokenizeStart = std::chrono::high_resolution_clock::now();
-  inputContainer.tokenizeLlama(vocabFile, MaxTokenLength);
-  const auto buddyTokenizeEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> buddyTokenizeTime =
-      buddyTokenizeEnd - buddyTokenizeStart;
-  printLogLabel();
-  std::cout << "Tokenize time: " << buddyTokenizeTime.count() << "ms"
-            << std::endl;
-}
-
-/// Load parameters into data container.
-void loadParameters(const std::string &paramFilePath,
-                    MemRef<float, 1> &params) {
-  const auto loadStart = std::chrono::high_resolution_clock::now();
-  std::ifstream paramFile(paramFilePath, std::ios::in | std::ios::binary);
-  if (!paramFile.is_open()) {
-    std::cout << paramFilePath << std::endl;
-    throw std::runtime_error("[Error] Failed to open params file!");
-  }
-  printLogLabel();
-  std::cout << "Loading params..." << std::endl;
-  printLogLabel();
-  std::cout << "Params file: " << std::filesystem::canonical(paramFilePath)
-            << std::endl;
-  paramFile.read(reinterpret_cast<char *>(params.getData()),
-                 sizeof(float) * (params.getSize()));
-  if (paramFile.fail()) {
-    throw std::runtime_error("Error occurred while reading params file!");
-  }
-  paramFile.close();
-  const auto loadEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> loadTime =
-      loadEnd - loadStart;
-  printLogLabel();
-  std::cout << "Params load time: " << (double)(loadTime.count()) / 1000
-            << "s\n"
-            << std::endl;
-}
 
 // 共享内存结构（线程安全队列）
 class SharedQueue {
@@ -393,7 +339,7 @@ private:
 //------------------------------------------------------------------------------
 class Comp {
 public:
-  Comp(SharedQueue &queue, const std::string splitNum) : sharedQueue(queue), splitNum(splitNum) {}
+  Comp(SharedQueue &queue, const std::string splitNum = "0") : sharedQueue(queue), splitNum(splitNum) {}
 
   void init() { loadAllParameters(); }
 
@@ -442,18 +388,21 @@ private:
         0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
         0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
         0,         4096, 67633152, 0, 131076096};
-    /// Define directories of vacabulary and parameter file.
-    std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
+    size_t group_len = sizeof(paramSize_group) / sizeof(paramSize_group[0]);
+    BaseDisModel::getParameters(paramSize_group, group_len, 67633152,
+                                 splitNum, paramsContainers);
+  //   /// Define directories of vacabulary and parameter file.
+  //   std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
 
-    for (int i = 0; i < 194; i++) { // N 为需要生成的数量
-      if (paramSize_group[i] == 67633152) {
-        std::string paramsDir = llamaBuildDir + "/subgraph" +
-                                std::to_string(i) + "_arg" + splitNum + ".data";
-        MemRef<float, 1> paramsContainer({paramSize_group[i]});
-        loadParameters(paramsDir, paramsContainer);
-        paramsContainers.push_back(std::move(paramsContainer));
-      }
-    }
+  //   for (int i = 0; i < 194; i++) { // N 为需要生成的数量
+  //     if (paramSize_group[i] == 67633152) {
+  //       std::string paramsDir = llamaBuildDir + "/subgraph" +
+  //                               std::to_string(i) + "_arg" + splitNum + ".data";
+  //       MemRef<float, 1> paramsContainer({paramSize_group[i]});
+  //       loadParameters(paramsDir, paramsContainer);
+  //       paramsContainers.push_back(std::move(paramsContainer));
+  //     }
+  //   }
   }
 };
 

@@ -4,6 +4,7 @@
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
+#include "BaseDisModel.h"
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -41,38 +42,6 @@ constexpr size_t HiddenSize1 = 41;
 /// Declare LLaMA forward function.
 extern "C" void _mlir_ciface_forward1(MemRef<float, 3> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *);
-
-/// Print [Log] label in bold blue format.
-void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
-
-/// Load parameters into data container.
-void loadParameters(const std::string &paramFilePath,
-                    MemRef<float, 1> &params) {
-  const auto loadStart = std::chrono::high_resolution_clock::now();
-  std::ifstream paramFile(paramFilePath, std::ios::in | std::ios::binary);
-  if (!paramFile.is_open()) {
-    std::cout << paramFilePath << std::endl;
-    throw std::runtime_error("[Error] Failed to open params file!");
-  }
-  printLogLabel();
-  std::cout << "Loading params..." << std::endl;
-  printLogLabel();
-  std::cout << "Params file: " << std::filesystem::canonical(paramFilePath)
-            << std::endl;
-  paramFile.read(reinterpret_cast<char *>(params.getData()),
-                 sizeof(float) * (params.getSize()));
-  if (paramFile.fail()) {
-    throw std::runtime_error("Error occurred while reading params file!");
-  }
-  paramFile.close();
-  const auto loadEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> loadTime =
-      loadEnd - loadStart;
-  printLogLabel();
-  std::cout << "Params load time: " << (double)(loadTime.count()) / 1000
-            << "s\n"
-            << std::endl;
-}
 
 // 共享内存结构（线程安全队列）
 class SharedQueue {
@@ -362,7 +331,28 @@ private:
 //---------------------------------------------------------------------
 class Comp {
 public:
-  Comp(SharedQueue &queue, const int rmsNum) : sharedQueue(queue) {
+  Comp(SharedQueue &queue, const int rmsNum) : sharedQueue(queue), rmsNum(rmsNum) {}
+
+  void init() {loadAllParameters();}
+
+  void run() {
+    while (true) {
+      auto input = std::any_cast<MemRef<float, 3>>(sharedQueue.pop_input());
+      MemRef<float, 3> resultContainer({1, SubMaxTokenLength, HiddenSize});
+      _mlir_ciface_forward1(&resultContainer, &paramsContainers[index], &input);
+      std::cout << "第" << index << "次forward1 computed." << std::endl;
+      sharedQueue.push_output(resultContainer);
+      index = (index + 1) % 32;
+    }
+  }
+
+private:
+  SharedQueue &sharedQueue;
+  std::vector<MemRef<float, 1>> paramsContainers;
+  uint32_t index = 0;
+  const int rmsNum;
+
+  void loadAllParameters(){
     constexpr size_t paramSize_group[] = {
         131072064, 4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
         0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
@@ -394,27 +384,11 @@ public:
         std::string paramsDir =
             llamaBuildDir + "/subgraph" + std::to_string(i) + "_arg0.data";
         MemRef<float, 1> paramsContainer({paramSize_group[i]});
-        loadParameters(paramsDir, paramsContainer);
+        BaseDisModel::loadParameters(paramsDir, paramsContainer);
         paramsContainers.push_back(std::move(paramsContainer));
       }
     }
   }
-
-  void run() {
-    while (true) {
-      auto input = std::any_cast<MemRef<float, 3>>(sharedQueue.pop_input());
-      MemRef<float, 3> resultContainer({1, SubMaxTokenLength, HiddenSize});
-      _mlir_ciface_forward1(&resultContainer, &paramsContainers[index], &input);
-      std::cout << "第" << index << "次forward1 computed." << std::endl;
-      sharedQueue.push_output(resultContainer);
-      index = (index + 1) % 32;
-    }
-  }
-
-private:
-  SharedQueue &sharedQueue;
-  std::vector<MemRef<float, 1>> paramsContainers;
-  uint32_t index = 0;
 };
 
 #endif // LLAMARMS_H

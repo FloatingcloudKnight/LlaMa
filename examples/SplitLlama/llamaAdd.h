@@ -42,61 +42,6 @@ constexpr size_t HiddenSize1 = 41;
 extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 2> *,
                                       MemRef<float, 3> *);
 
-/// Print [Log] label in bold blue format.
-void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
-
-/// Print information for each iteration.
-void printIterInfo(size_t iterIdx, std::string str, double time) {
-  std::cout << "\033[32;1m[Iteration " << iterIdx << "] \033[0m";
-  std::cout << "Token: " << str << " | "
-            << "Time: " << time << "s" << std::endl;
-}
-
-/// Tokenize input data in the container.
-void tokenizeInput(const std::string &vocabFile,
-                   Text<size_t, 2> &inputContainer) {
-  printLogLabel();
-  std::cout << "Vocab file: " << std::filesystem::canonical(vocabFile)
-            << std::endl;
-  const auto buddyTokenizeStart = std::chrono::high_resolution_clock::now();
-  inputContainer.tokenizeLlama(vocabFile, MaxTokenLength);
-  const auto buddyTokenizeEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> buddyTokenizeTime =
-      buddyTokenizeEnd - buddyTokenizeStart;
-  printLogLabel();
-  std::cout << "Tokenize time: " << buddyTokenizeTime.count() << "ms"
-            << std::endl;
-}
-
-/// Load parameters into data container.
-void loadParameters(const std::string &paramFilePath,
-                    MemRef<float, 1> &params) {
-  const auto loadStart = std::chrono::high_resolution_clock::now();
-  std::ifstream paramFile(paramFilePath, std::ios::in | std::ios::binary);
-  if (!paramFile.is_open()) {
-    std::cout << paramFilePath << std::endl;
-    throw std::runtime_error("[Error] Failed to open params file!");
-  }
-  printLogLabel();
-  std::cout << "Loading params..." << std::endl;
-  printLogLabel();
-  std::cout << "Params file: " << std::filesystem::canonical(paramFilePath)
-            << std::endl;
-  paramFile.read(reinterpret_cast<char *>(params.getData()),
-                 sizeof(float) * (params.getSize()));
-  if (paramFile.fail()) {
-    throw std::runtime_error("Error occurred while reading params file!");
-  }
-  paramFile.close();
-  const auto loadEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> loadTime =
-      loadEnd - loadStart;
-  printLogLabel();
-  std::cout << "Params load time: " << (double)(loadTime.count()) / 1000
-            << "s\n"
-            << std::endl;
-}
-
 // 共享内存结构（线程安全队列）
 class SharedQueue {
 public:

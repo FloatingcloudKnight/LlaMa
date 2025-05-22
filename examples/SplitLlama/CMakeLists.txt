@@ -566,12 +566,14 @@ add_custom_command(
     COMMENT "Building subgraph193.o "
     VERBATIM)
 
+set(Boost_INCLUDE_DIR "/home/chenweiwei/boost_1_86_0/include")
 add_library(SPLITLLAMA5 STATIC forward193.o subgraph193.o)
 
 # 查找 Boost 库
 find_package(Boost REQUIRED COMPONENTS system thread)
 
 # 包含 Boost 头文件
+
 include_directories(${Boost_INCLUDE_DIRS})
 
 # 添加 websocketpp 头文件路径

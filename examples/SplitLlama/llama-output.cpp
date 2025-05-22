@@ -24,6 +24,8 @@ int main() {
   Comp comp(shared_queue);
 
   std::thread output_thread([&outputMess] { outputMess.run(); });
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  comp.init();
   std::thread comp_thread([&comp] { comp.run(); });
 
   output_thread.join();

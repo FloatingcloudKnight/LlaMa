@@ -1,5 +1,6 @@
 #ifndef LLAMAOUTPUT_H // 作用：防止llamaOutput.h被重复引用
 #define LLAMAOUTPUT_H
+#include "BaseDisModel.h"
 #include <any>
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
@@ -45,34 +46,6 @@ void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
 /// Declare LLaMA forward function.
 extern "C" void _mlir_ciface_forward193(MemRef<float, 3> *, MemRef<float, 1> *,
                                         MemRef<float, 3> *);
-
-void loadParameters(const std::string &paramFilePath,
-                    MemRef<float, 1> &params) {
-  const auto loadStart = std::chrono::high_resolution_clock::now();
-  std::ifstream paramFile(paramFilePath, std::ios::in | std::ios::binary);
-  if (!paramFile.is_open()) {
-    std::cout << paramFilePath << std::endl;
-    throw std::runtime_error("[Error] Failed to open params file!");
-  }
-  printLogLabel();
-  std::cout << "Loading params..." << std::endl;
-  printLogLabel();
-  std::cout << "Params file: " << std::filesystem::canonical(paramFilePath)
-            << std::endl;
-  paramFile.read(reinterpret_cast<char *>(params.getData()),
-                 sizeof(float) * (params.getSize()));
-  if (paramFile.fail()) {
-    throw std::runtime_error("Error occurred while reading params file!");
-  }
-  paramFile.close();
-  const auto loadEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> loadTime =
-      loadEnd - loadStart;
-  printLogLabel();
-  std::cout << "Params load time: " << (double)(loadTime.count()) / 1000
-            << "s\n"
-            << std::endl;
-}
 
 /// Find the index of the max value.
 int findMaxIndex(const float *start, const float *end) {
@@ -139,12 +112,10 @@ private:
 //--------------------- OutputMess (主线程) ---------------------
 class OutputMess {
 public:
-  OutputMess(SharedQueue &queue,
-             const std::string &uri, const std::string &uri0,
-             const std::string &uri1)
+  OutputMess(SharedQueue &queue, const std::string &uri,
+             const std::string &uri0, const std::string &uri1)
       : addClient(), addClient0(), inputClient(), sharedQueue(queue),
-        outputContainer(), inputHdl(),
-        currentToken(),
+        outputContainer(), inputHdl(), currentToken(),
         resultContainer(MemRef<float, 3>({1, MaxTokenLength, HiddenSize})) {
     /// 客户端初始化
     addClient.set_access_channels(websocketpp::log::alevel::none);
@@ -214,13 +185,13 @@ public:
         // Append the generated token into the input and output container.
         outputContainer.appendTokenIdx(maxIndex);
 
-        if (currentToken ==  (MaxTokenLength - tokenCnt)) {
-          std::cout << "\033[33;1m[Output]\033[0m " << outputContainer.revertLlama()
-                    << std::endl;
+        if (currentToken == (MaxTokenLength - tokenCnt)) {
+          std::cout << "\033[33;1m[Output]\033[0m "
+                    << outputContainer.revertLlama() << std::endl;
           currentToken = 0;
         } else if (currentToken < (MaxTokenLength - tokenCnt)) {
           inputClient.send(inputHdl, std::to_string(maxIndex),
-                       websocketpp::frame::opcode::text);
+                           websocketpp::frame::opcode::text);
           std::cout << "第" << currentToken << "次Token推理完成." << std::endl;
         } else {
           std::cout << "Transformer层计算次数过多, 当前次数为: " << currentToken
@@ -232,7 +203,6 @@ public:
     addClient0_thread.join();
     output_thread.join();
   }
-
 
 private:
   client addClient;
@@ -253,32 +223,6 @@ private:
   /// Define directories of vacabulary and file.
   std::string llamaDir = LLAMA_SPLIT_EXAMPLE_PATH;
   const std::string vocabDir = llamaDir + "/vocab.txt";
-
-  // void send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
-  //                const std::vector<std::vector<float>> &data) {
-  //   const uint8_t total = data.size();
-
-  //   for (uint8_t i = 0; i < total; ++i) {
-  //     const auto &subdata = data[i];
-
-  //     // 构造协议头
-  //     std::vector<uint8_t> packet(10); // 4+1+1+2=10字节头
-  //     memcpy(packet.data(), &dataId, 4);
-  //     packet[4] = total;
-  //     packet[5] = i;
-  //     uint32_t num = subdata.size();
-  //     memcpy(packet.data() + 6, &num, 4);
-
-  //     // 添加浮点数据
-  //     const uint8_t *binaryData =
-  //         reinterpret_cast<const uint8_t *>(subdata.data());
-  //     packet.insert(packet.end(), binaryData,
-  //                   binaryData + subdata.size() * sizeof(float));
-
-  //     inputClient.send(hdl, packet.data(), packet.size(),
-  //                      websocketpp::frame::opcode::binary);
-  //   }
-  // }
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
@@ -326,22 +270,22 @@ private:
 
   void on_addClient_message(websocketpp::connection_hdl hdl,
                             client::message_ptr msg) {
-      std::lock_guard<std::mutex> lock(data_mutex);
-      auto chunk = getFloatData(msg);
-      intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
-      MemRef<float, 3> subResultContainer(chunk.data(), sizes);
-      sharedQueue.push_input(subResultContainer);
-      std::cout << "接收到AddMess0数据" << std::endl;
+    std::lock_guard<std::mutex> lock(data_mutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
+    MemRef<float, 3> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push_input(subResultContainer);
+    std::cout << "接收到AddMess0数据" << std::endl;
   }
 
   void on_addClient0_message(websocketpp::connection_hdl hdl,
                              client::message_ptr msg) {
-      std::lock_guard<std::mutex> lock(data_mutex);
-      auto chunk = getFloatData(msg);
-      intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
-      MemRef<float, 3> subResultContainer(chunk.data(), sizes);
-      sharedQueue.push_input0(subResultContainer);
-      std::cout << "接收到AddMess1数据" << std::endl;
+    std::lock_guard<std::mutex> lock(data_mutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
+    MemRef<float, 3> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push_input0(subResultContainer);
+    std::cout << "接收到AddMess1数据" << std::endl;
   }
 
   void on_inputClient_message(websocketpp::connection_hdl hdl,
@@ -350,7 +294,7 @@ private:
     try {
       if (payload.empty())
         throw std::invalid_argument("空输入");
-        tokenCnt = std::stoi(payload);
+      tokenCnt = std::stoi(payload);
     } catch (const std::exception &e) {
       std::cout << "无效输入: " << payload << " (" << e.what() << ")"
                 << std::endl;
@@ -361,26 +305,16 @@ private:
 //--------------------- Comp (子线程) ---------------------
 class Comp {
 public:
-  Comp(SharedQueue &queue)
-      : sharedQueue(queue),
-        paramsContainer({ParamSize}) {
-          /// Define directories of parameter file.
-          std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
-          std::string paramsDir =
-              llamaBuildDir + "/subgraph193_arg0.data"; // 权重文件路径
-          loadParameters(paramsDir, paramsContainer);
-        }
-
+  Comp(SharedQueue &queue) : sharedQueue(queue), paramsContainer({ParamSize}) {}
+  void init() { loadAllParameters(); }
   void run() {
     while (true) {
       MemRef<float, 3> addInput = sharedQueue.pop_input();
       MemRef<float, 3> addInput0 = sharedQueue.pop_input0();
       MemRef<float, 3> input0({1, MaxTokenLength, HiddenSize});
       MemRef<float, 3> resultContainer({1, MaxTokenLength, HiddenSize});
-      input0.concatenateMemRefs(addInput, addInput0, input0,
-                                         1);
-      _mlir_ciface_forward193(&resultContainer, &paramsContainer,
-                              &input0);
+      input0.concatenateMemRefs(addInput, addInput0, input0, 1);
+      _mlir_ciface_forward193(&resultContainer, &paramsContainer, &input0);
       std::cout << "forward193 computed." << std::endl;
       sharedQueue.push_output(resultContainer);
     }
@@ -389,6 +323,14 @@ public:
 private:
   SharedQueue &sharedQueue;
   MemRef<float, 1> paramsContainer;
+
+  void loadAllParameters() {
+    /// Define directories of parameter file.
+    std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
+    std::string paramsDir =
+        llamaBuildDir + "/subgraph193_arg0.data"; // 权重文件路径
+    BaseDisModel::loadParameters(paramsDir, paramsContainer);
+  }
 };
 
 #endif // LLAMAOUTPUT_H
