@@ -19,7 +19,7 @@
 // -----------------------------------------------------------------------------
 
 int main() {
-  SharedQueue shared_queue;
+  OutputQueue shared_queue;
   OutputMess outputMess(shared_queue, "ws://localhost:9012", "ws://localhost:9013", "ws://localhost:9001");
   Comp comp(shared_queue);
 

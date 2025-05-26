@@ -19,7 +19,7 @@
 // -----------------------------------------------------------------------------
 
 int main() {
-  SharedQueue shared_queue;
+  MLPQueue shared_queue;
   MLPMess mlpMess("MLPMess1", shared_queue, 9011, "ws://localhost:9008", "ws://localhost:9009");
   Comp comp(shared_queue, "1");
 

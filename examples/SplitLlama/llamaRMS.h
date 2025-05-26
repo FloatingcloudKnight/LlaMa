@@ -23,6 +23,7 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
+#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -43,52 +44,22 @@ constexpr size_t HiddenSize1 = 41;
 extern "C" void _mlir_ciface_forward1(MemRef<float, 3> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *);
 
-// 共享内存结构（线程安全队列）
-class SharedQueue {
-public:
-  void push_input(const std::any &data) {
-    std::lock_guard<std::mutex> lock(inputMutex);
-    inputQueue.push(data);
-    input_cv.notify_one();
-  }
-
-  std::any pop_input() {
-    std::unique_lock<std::mutex> lock(inputMutex);
-    input_cv.wait(lock, [this] { return !inputQueue.empty(); });
-    auto data = inputQueue.front();
-    inputQueue.pop();
-    return data;
-  }
-
-  void push_output(const std::any &data) {
-    std::lock_guard<std::mutex> lock(outputMutex);
-    outputQueue.push(data);
-    output_cv.notify_one();
-  }
-
-  std::any pop_output() {
-    std::unique_lock<std::mutex> lock(outputMutex);
-    output_cv.wait(lock, [this] { return !outputQueue.empty(); });
-    auto data = outputQueue.front();
-    outputQueue.pop();
-    return data;
-  }
-
-private:
-  std::queue<std::any> inputQueue;
-  std::queue<std::any> outputQueue;
-  std::mutex inputMutex;
-  std::mutex outputMutex;
-  std::condition_variable input_cv;
-  std::condition_variable output_cv;
-};
 
 //--------------------- RMSMess (主线程) ---------------------
+
+class RMSQueue : public SharedQueueTemp {
+
+public:
+
+  RMSQueue() : SharedQueueTemp({"input", "output"}) {}
+
+};
+
 class RMSMess {
 public:
-  RMSMess(const std::string name, SharedQueue &queue, const uint16_t &port,
+  RMSMess(const std::string name, RMSQueue &queue, const uint16_t &port,
           const std::string &uri)
-      : rmsServer(), name(name), inputClient(), sharedQueue(queue),
+      : queue(queue), rmsServer(), name(name), inputClient(), 
         hdlsSymbol(),
         resultContainer(MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize})),
         dataId(0) {
@@ -139,7 +110,7 @@ public:
     // 新增：启动输出监听线程，向MHAMess或MLPMess发送数据
     std::thread output_thread([this]() {
       while (true) {
-        resultContainer = std::any_cast<MemRef<float, 3>>(sharedQueue.pop_output());
+        resultContainer = queue.pop<MemRef<float, 3>>("output");
         std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
         if (hdlsSymbol.find("MHAMess0") != hdlsSymbol.end()) {
           send_data(hdlsSymbol["MHAMess0"], dataId++,
@@ -169,7 +140,7 @@ private:
   server rmsServer;
   client inputClient;
   const std::string name;
-  SharedQueue &sharedQueue;
+  RMSQueue &queue;
   std::map<std::string, websocketpp::connection_hdl> hdlsSymbol;
   std::map<websocketpp::connection_hdl, std::string,
            std::owner_less<websocketpp::connection_hdl>>
@@ -300,7 +271,7 @@ private:
           std::cout << "AddMess未连接, 丢弃结果." << std::endl;
         }
       }
-      sharedQueue.push_input(subResultContainer);
+      queue.push<MemRef<float, 3>>("input", subResultContainer);
     }
   }
 
@@ -322,7 +293,7 @@ private:
         std::cout << "AddMess未连接, 丢弃结果." << std::endl;
       }
     }
-    sharedQueue.push_input(subResultContainer);
+    queue.push<MemRef<float, 3>>("input", subResultContainer);
   }
 };
 
@@ -331,23 +302,23 @@ private:
 //---------------------------------------------------------------------
 class Comp {
 public:
-  Comp(SharedQueue &queue, const int rmsNum) : sharedQueue(queue), rmsNum(rmsNum) {}
+  Comp(RMSQueue &queue, const int rmsNum) : queue(queue), rmsNum(rmsNum) {}
 
   void init() {loadAllParameters();}
 
   void run() {
     while (true) {
-      auto input = std::any_cast<MemRef<float, 3>>(sharedQueue.pop_input());
+      auto input = queue.pop<MemRef<float, 3>>("input");
       MemRef<float, 3> resultContainer({1, SubMaxTokenLength, HiddenSize});
       _mlir_ciface_forward1(&resultContainer, &paramsContainers[index], &input);
       std::cout << "第" << index << "次forward1 computed." << std::endl;
-      sharedQueue.push_output(resultContainer);
+      queue.push<MemRef<float, 3>>("output", resultContainer);
       index = (index + 1) % 32;
     }
   }
 
 private:
-  SharedQueue &sharedQueue;
+  RMSQueue &queue;
   std::vector<MemRef<float, 1>> paramsContainers;
   uint32_t index = 0;
   const int rmsNum;
