@@ -21,7 +21,7 @@ public:
 
   /// Load parameters into data container.
   static void loadParameters(const std::string &paramFilePath,
-                      MemRef<float, 1> &params) {
+                             MemRef<float, 1> &params) {
     const auto loadStart = std::chrono::high_resolution_clock::now();
     std::ifstream paramFile(paramFilePath, std::ios::in | std::ios::binary);
     if (!paramFile.is_open()) {
@@ -82,20 +82,50 @@ public:
               << std::endl;
   }
 
-  // Add the inference Token to the input sequence , and translate the result of that Token
-  // inputContainer: Current input container, token will be appended
+  // Add the inference Token to the input sequence , and translate the result of
+  // that Token inputContainer: Current input container, token will be appended
   // msg: Token to be appended
-  static void appendToken(Text<size_t, 2> &inputContainer, std::string &msg){
-      int maxIndex = std::stoi(msg);
-      // Determine the generated token.
-      int tokenIndex = inputContainer.getTokenCnt() - 1;
-      std::string tok = inputContainer.getStr(maxIndex);
-      // printIterInfo
-      std::cout << "\033[32;1m[Iteration " << tokenIndex << "] \033[0m";
-      std::cout << "Token: " << tok << std::endl;
+  static void appendToken(Text<size_t, 2> &inputContainer, std::string &msg) {
+    int maxIndex = std::stoi(msg);
+    // Determine the generated token.
+    int tokenIndex = inputContainer.getTokenCnt() - 1;
+    std::string tok = inputContainer.getStr(maxIndex);
+    // printIterInfo
+    std::cout << "\033[32;1m[Iteration " << tokenIndex << "] \033[0m";
+    std::cout << "Token: " << tok << std::endl;
 
-      // Append the generated token into the input and output container.
-      inputContainer.appendTokenIdx(maxIndex);
+    // Append the generated token into the input and output container.
+    inputContainer.appendTokenIdx(maxIndex);
+  }
+
+  //Generate a Token based on the inference result and add the token to the output sequence
+  //Return value: the index of the token generated; if the generation is finished (the terminator is encountered), -1 is returned.
+  // resultContainer: container for the result of one inference of the model 
+  // outputContainer: store the output sequence of tokens 
+  // currentToken: the number of tokens currently generated 
+  // tokenCnt: the number of tokens in the original input
+  // MaxVocabSize:The maximum number of tokens allowed in the model's vocabulary.
+  // separatorTokenIndex: The vocabulary index of the end-of-inference token.
+  static int generatedToken( MemRef<float, 3> & resultContainer,
+                             Text<size_t, 2> & outputContainer,
+                             uint32_t &currentToken, uint32_t tokenCnt,
+                             const size_t MaxVocabSize,
+                             const size_t separatorTokenIndex) {
+    int tokenIndex = currentToken + tokenCnt - 1;
+    currentToken++;
+    // Determine the generated token.
+    const float *startPtr = resultContainer.getData() + tokenIndex * MaxVocabSize;
+    const float *endPtr = startPtr + MaxVocabSize;
+    // int maxIndex = findMaxIndex(startPtr, endPtr);
+    int maxIndex = std::distance(startPtr, std::max_element(startPtr, endPtr));
+
+    // Stop if a separator token or line break token (13<0x0A>) is generated.
+    if (maxIndex == separatorTokenIndex)
+      return -1;
+
+    outputContainer.appendTokenIdx(maxIndex);
+
+    return maxIndex;
   }
 };
 
