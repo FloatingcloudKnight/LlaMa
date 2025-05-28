@@ -39,7 +39,8 @@ int main() {
   //  - Output: register vocabulary.
   //  - Parameters: load parameters from the `arg0` file into the container.
 
-  SharedQueue shared_queue;
+  // SharedQueue shared_queue;
+  InputQueue shared_queue;
   InputMess inputMess(shared_queue, resultContainerPtr);
   Comp comp(shared_queue, resultContainerPtr);
 

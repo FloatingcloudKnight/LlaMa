@@ -19,7 +19,7 @@
 // -----------------------------------------------------------------------------
 
 int main() {
-  SharedQueue shared_queue;
+  MHAQueue shared_queue;
   MHAMess mahMess("MHAMess1", shared_queue, 9005, "ws://localhost:9001", "ws://localhost:9002", "ws://localhost:9003");
   Comp comp(shared_queue, "1");
 
