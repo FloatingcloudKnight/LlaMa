@@ -65,6 +65,38 @@ public:
       }
     }
   }
+
+  //  Tokenize input data in the container.
+  static void tokenizeInput(const std::string &vocabFile,
+                    Text<size_t, 2> &inputContainer, const size_t MaxTokenLength ) {
+    printLogLabel();
+    std::cout << "Vocab file: " << std::filesystem::canonical(vocabFile)
+              << std::endl;
+    const auto buddyTokenizeStart = std::chrono::high_resolution_clock::now();
+    inputContainer.tokenizeLlama(vocabFile, MaxTokenLength);
+    const auto buddyTokenizeEnd = std::chrono::high_resolution_clock::now();
+    const std::chrono::duration<double, std::milli> buddyTokenizeTime =
+        buddyTokenizeEnd - buddyTokenizeStart;
+    printLogLabel();
+    std::cout << "Tokenize time: " << buddyTokenizeTime.count() << "ms"
+              << std::endl;
+  }
+
+  // Add the inference Token to the input sequence , and translate the result of that Token
+  // inputContainer: Current input container, token will be appended
+  // msg: Token to be appended
+  static void appendToken(Text<size_t, 2> &inputContainer, std::string &msg){
+      int maxIndex = std::stoi(msg);
+      // Determine the generated token.
+      int tokenIndex = inputContainer.getTokenCnt() - 1;
+      std::string tok = inputContainer.getStr(maxIndex);
+      // printIterInfo
+      std::cout << "\033[32;1m[Iteration " << tokenIndex << "] \033[0m";
+      std::cout << "Token: " << tok << std::endl;
+
+      // Append the generated token into the input and output container.
+      inputContainer.appendTokenIdx(maxIndex);
+  }
 };
 
 #endif // BASEDISMODEL_H

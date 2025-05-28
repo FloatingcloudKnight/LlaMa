@@ -81,27 +81,6 @@ void getUserInput(std::string &inputStr) {
 /// Print [Log] label in bold blue format.
 void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
 
-/// Print information for each iteration.
-void printIterInfo(size_t iterIdx, std::string str) {
-  std::cout << "\033[32;1m[Iteration " << iterIdx << "] \033[0m";
-  std::cout << "Token: " << str << std::endl;
-}
-
-/// Tokenize input data in the container.
-void tokenizeInput(const std::string &vocabFile,
-                   Text<size_t, 2> &inputContainer) {
-  printLogLabel();
-  std::cout << "Vocab file: " << std::filesystem::canonical(vocabFile)
-            << std::endl;
-  const auto buddyTokenizeStart = std::chrono::high_resolution_clock::now();
-  inputContainer.tokenizeLlama(vocabFile, MaxTokenLength);
-  const auto buddyTokenizeEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> buddyTokenizeTime =
-      buddyTokenizeEnd - buddyTokenizeStart;
-  printLogLabel();
-  std::cout << "Tokenize time: " << buddyTokenizeTime.count() << "ms"
-            << std::endl;
-}
 
 //--------------------- InputMess (主线程) ---------------------
 class InputQueue : public SharedQueueTemp {
@@ -254,23 +233,16 @@ private:
       getUserInput(inputStr);
       // 创建并tokenize输入容器
       inputContainer = Text<size_t, 2>(inputStr);
-      tokenizeInput(vocabDir, inputContainer);
+      BaseDisModel::tokenizeInput(vocabDir, inputContainer, MaxTokenLength);
       // 将输入压入队列
       shared_queue.push("input", inputContainer);
+      // 发送 token 数量到 Output 模块
       int tokenCnt = inputContainer.getTokenCnt();
       inputServer.send(hdl, std::to_string(tokenCnt),
                        websocketpp::frame::opcode::text);
+
     } else {
-      // 获取客户端类型
-      int maxIndex = std::stoi(payload);
-      // Determine the generated token.
-      int tokenIndex = inputContainer.getTokenCnt() - 1;
-      std::string tok = inputContainer.getStr(maxIndex);
-      printIterInfo(tokenIndex, tok);
-
-      // Append the generated token into the input and output container.
-      inputContainer.appendTokenIdx(maxIndex);
-
+      BaseDisModel::appendToken(inputContainer, payload);
       shared_queue.push("input", inputContainer);
     }
   }
