@@ -268,7 +268,9 @@ class GraphDriver:
               ):
                   subgraphs_outputs[subgraph_name].append(op)
       
-      # 更新每个子图中与需要拆分的权重矩阵相关的节点的shape信息，对PermuteOp, MatmulOp, AddOp, SubOp, MulOp, DivOp, ViewOp, CatOp等会根据输入数据的shape而改变输出数据的shape的算子进行特殊处理
+      # 更新每个子图中与需要拆分的权重矩阵相关的节点的shape信息，对PermuteOp, MatmulOp, AddOp, 
+      # SubOp, MulOp, DivOp, ViewOp, CatOp等会根据输入数据的shape而改变输出数据的shape的
+      # 算子进行特殊处理
       if self._parallelism == 1:
         return subgraphs_inputs, subgraphs_outputs
       for subgraph_name in self.op_groups.keys():
