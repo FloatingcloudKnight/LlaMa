@@ -68,7 +68,7 @@ def make_output_memref_descriptor(ranks, dtypes):
 
     return OutputDescriptor
 
-
+# Graph类, 表示Buddy编译器前端的图级表达式。
 class Graph:
     """
     Graph is a graph-level expression for the Buddy Compiler frontends.
@@ -136,7 +136,8 @@ class Graph:
         self._output_memref = None
         self._output_descriptor = None
         self.execution_engine = None
-        self.paral_group: Dict[str, List[int]] = {}
+        self.op_groups: Dict[str, List[Op]] = {}
+        self.group_map_device: Dict[str, DeviceType] = {}
 
     @property
     def body(self):
@@ -514,8 +515,7 @@ class GraphImporter:
         """
         for key, value in self._symbol_table.items():
             print(f"Key: {key}, Value: {value}")
-            
-
+    
     def import_graph(self) -> ir.Module:
         """
         Imports buddy graph and generates an MLIR module in high-level dialects.
@@ -524,6 +524,7 @@ class GraphImporter:
             mlir.ir.Module: An MLIR module in high-level dialects.
         """
         assert self._do_param_pack == False
+        # 创建一个新Module, 根据计算图中的算子添加对应的MLIR操作
         with ir.InsertionPoint(self._module.body):
             arguments = []
             inputs = self._params + self._inputs
@@ -538,7 +539,7 @@ class GraphImporter:
                 if isinstance(node, FuncOp):
                     extern_func.append(node)
                     self._import_op(node)
-
+            # 
             @func.FuncOp.from_py_func(*arguments, name=self._func_name)
             def generated_func(*args):
                 args_list = list(args)
@@ -590,6 +591,7 @@ class GraphImporter:
         Returns:
             mlir.ir.Module: An MLIR module in high-level dialects.
         """
+        # 创建一个新Module, 根据计算图中的算子添加对应的MLIR操作
         with ir.InsertionPoint(self._module.body):
             arguments = []
             if self._do_param_pack:
@@ -610,10 +612,13 @@ class GraphImporter:
                     extern_func.append(node)
                     self._import_op(node)
 
+            # 将下方的Python函数包装为MLIR中的函数操作（FuncOp）
             @func.FuncOp.from_py_func(*arguments, name=self._func_name)
             def generated_func(*args):
                 args_list = list(args)
+                # 遍历计算图的节点进行针对性处理
                 for node in self._body:
+                    # 外部函数无需处理
                     if node in extern_func:
                         continue
                     if isinstance(node, OutputOp):
@@ -628,6 +633,7 @@ class GraphImporter:
                             node.tensor_meta['shape'] = torch.Size(list(node._newshape))
                         self._import_placeholder(node, args_list)
                     elif isinstance(node, GetItemOp):
+                        # print(self._symbol_table)
                         self._symbol_table[(str(node.name), 0)] = (
                             self._symbol_table[
                                 (str(node.args[0]), node.args[1])
@@ -635,7 +641,7 @@ class GraphImporter:
                         )
                     else:
                         self._import_op(node)
-
+                    
                 return self._symbol_table.get(("output", 0))
 
         return self._module
@@ -693,9 +699,11 @@ class GraphImporter:
 
         """
         op_name = node.__class__.__name__
+        # 根据算子类型自动调用MLIR操作注册表中的对应函数生成MLIR操作
         op_ret: ir.Operation | ir.Value | tuple | List | ir.OpResult = (
             self._ops_registry[op_name](node, self._symbol_table)
         )
+        # 根据返回值类型将MLIR操作结果添加到符号表中
         if isinstance(op_ret, tuple | List):
             for i, operation in enumerate(op_ret):
                 if isinstance(operation, ir.Operation) or isinstance(
