@@ -19,7 +19,7 @@
 // -----------------------------------------------------------------------------
 
 int main() {
-  SharedQueue shared_queue;
+  RMSQueue shared_queue;
   RMSMess rmsMess("RMSMess1", shared_queue, 9009, "ws://localhost:9007");
   Comp comp(shared_queue, 0);
 

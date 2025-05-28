@@ -36,6 +36,7 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
+#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -102,50 +103,16 @@ void tokenizeInput(const std::string &vocabFile,
             << std::endl;
 }
 
-// 共享内存结构（线程安全队列）
-class SharedQueue {
+//--------------------- InputMess (主线程) ---------------------
+class InputQueue : public SharedQueueTemp {
 public:
-  void push_input(const std::any &data) {
-    std::lock_guard<std::mutex> lock(input_mutex);
-    input_queue.push(data);
-    input_cv.notify_one();
-  }
-
-  std::any pop_input() {
-    std::unique_lock<std::mutex> lock(input_mutex);
-    input_cv.wait(lock, [this] { return !input_queue.empty(); });
-    auto data = input_queue.front();
-    input_queue.pop();
-    return data;
-  }
-
-  void push_output(const std::any &data) {
-    std::lock_guard<std::mutex> lock(output_mutex);
-    output_queue.push(data);
-    output_cv.notify_one();
-  }
-
-  std::any pop_output() {
-    std::unique_lock<std::mutex> lock(output_mutex);
-    output_cv.wait(lock, [this] { return !output_queue.empty(); });
-    auto data = output_queue.front();
-    output_queue.pop();
-    return data;
-  }
-
-private:
-  std::queue<std::any> input_queue;
-  std::queue<std::any> output_queue;
-  std::mutex input_mutex;
-  std::mutex output_mutex;
-  std::condition_variable input_cv;
-  std::condition_variable output_cv;
+  InputQueue() : SharedQueueTemp({"input", "output"}) {}
 };
 
-//--------------------- InputMess (主线程) ---------------------
+
 class InputMess {
 public:
-  InputMess(SharedQueue &queue, MemRefContainer *resultContainerPtr)
+  InputMess(InputQueue &queue, MemRefContainer *resultContainerPtr)
       : inputServer(), shared_queue(queue), hdlsSymbol(), inputContainer(),
         resultContainerPtr(resultContainerPtr),
         memRef3D0(MemRef<float, 3>({1, MaxTokenLength, HiddenSize})),
@@ -175,8 +142,7 @@ public:
     // 新增：启动输出监听线程，向RMSMess发送数据
     std::thread output_thread([this]() {
       while (true) {
-        resultContainerPtr =
-            std::any_cast<MemRefContainer *>(shared_queue.pop_output());
+        resultContainerPtr = shared_queue.pop<MemRefContainer*>("output");
         memRef3D0 = resultContainerPtr->memRef3D0;
         memRef2D = resultContainerPtr->memRef2D;
         memRef3D1 = resultContainerPtr->memRef3D1;
@@ -215,7 +181,7 @@ public:
 
 private:
   server inputServer;
-  SharedQueue &shared_queue;
+  InputQueue &shared_queue;
   std::map<std::string, websocketpp::connection_hdl> hdlsSymbol;
   std::map<websocketpp::connection_hdl, std::string,
            std::owner_less<websocketpp::connection_hdl>>
@@ -290,7 +256,7 @@ private:
       inputContainer = Text<size_t, 2>(inputStr);
       tokenizeInput(vocabDir, inputContainer);
       // 将输入压入队列
-      shared_queue.push_input(inputContainer);
+      shared_queue.push("input", inputContainer);
       int tokenCnt = inputContainer.getTokenCnt();
       inputServer.send(hdl, std::to_string(tokenCnt),
                        websocketpp::frame::opcode::text);
@@ -305,7 +271,7 @@ private:
       // Append the generated token into the input and output container.
       inputContainer.appendTokenIdx(maxIndex);
 
-      shared_queue.push_input(inputContainer);
+      shared_queue.push("input", inputContainer);
     }
   }
 };
@@ -313,7 +279,7 @@ private:
 //--------------------- Comp (子线程) ---------------------
 class Comp {
 public:
-  Comp(SharedQueue &queue, MemRefContainer *resultContainerPtr)
+  Comp(InputQueue &queue, MemRefContainer *resultContainerPtr)
       : shared_queue(queue), resultContainerPtr(resultContainerPtr),
         paramsContainer({ParamSize}) {
     
@@ -321,15 +287,15 @@ public:
   void init() { loadAllParameters(); }
   void run() {
     while (true) {
-      auto input = std::any_cast<Text<size_t, 2>>(shared_queue.pop_input());
+      auto input = shared_queue.pop<Text<size_t, 2>>("input");
       _mlir_ciface_forward0(resultContainerPtr, &paramsContainer, &input);
-      shared_queue.push_output(resultContainerPtr);
+      shared_queue.push("output", resultContainerPtr);
       std::cout << "forward0 computed." << std::endl;
     }
   }
 
 private:
-  SharedQueue &shared_queue;
+  InputQueue &shared_queue;
   MemRefContainer *resultContainerPtr;
   MemRef<float, 1> paramsContainer;
 

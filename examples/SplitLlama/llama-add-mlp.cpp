@@ -19,7 +19,7 @@
 // -----------------------------------------------------------------------------
 
 int main() {
-  SharedQueue shared_queue;
+  AddQueue shared_queue;
   AddMess addMess("AddMess0", 1, shared_queue, 9012, "ws://localhost:9008",
                   "ws://localhost:9010", "ws://localhost:9011", "ws://localhost:9002");
   Comp comp(shared_queue);

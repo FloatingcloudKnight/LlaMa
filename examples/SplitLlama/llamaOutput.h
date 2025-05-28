@@ -23,6 +23,7 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
+#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -52,67 +53,16 @@ int findMaxIndex(const float *start, const float *end) {
   return std::distance(start, std::max_element(start, end));
 }
 
-// 共享内存结构（线程安全队列）
-class SharedQueue {
-public:
-  void push_input(const MemRef<float, 3> &data) {
-    std::lock_guard<std::mutex> lock(input_mutex);
-    inputQueue.push(data);
-    input_cv.notify_one();
-  }
-
-  MemRef<float, 3> pop_input() {
-    std::unique_lock<std::mutex> lock(input_mutex);
-    input_cv.wait(lock, [this] { return !inputQueue.empty(); });
-    auto data = inputQueue.front();
-    inputQueue.pop();
-    return data;
-  }
-
-  void push_input0(const MemRef<float, 3> &data) {
-    std::lock_guard<std::mutex> lock(input0_mutex);
-    input0Queue.push(data);
-    input0_cv.notify_one();
-  }
-
-  MemRef<float, 3> pop_input0() {
-    std::unique_lock<std::mutex> lock(input0_mutex);
-    input0_cv.wait(lock, [this] { return !input0Queue.empty(); });
-    auto data = input0Queue.front();
-    input0Queue.pop();
-    return data;
-  }
-
-  void push_output(const MemRef<float, 3> &data) {
-    std::lock_guard<std::mutex> lock(output_mutex);
-    outputQueue.push(data);
-    output_cv.notify_one();
-  }
-
-  MemRef<float, 3> pop_output() {
-    std::unique_lock<std::mutex> lock(output_mutex);
-    output_cv.wait(lock, [this] { return !outputQueue.empty(); });
-    auto data = outputQueue.front();
-    outputQueue.pop();
-    return data;
-  }
-
-private:
-  std::queue<MemRef<float, 3>> inputQueue;
-  std::queue<MemRef<float, 3>> input0Queue;
-  std::queue<MemRef<float, 3>> outputQueue;
-  std::mutex input_mutex;
-  std::mutex input0_mutex;
-  std::mutex output_mutex;
-  std::condition_variable input_cv;
-  std::condition_variable input0_cv;
-  std::condition_variable output_cv;
-};
 
 //--------------------- OutputMess (主线程) ---------------------
+class OutputQueue : public SharedQueueTemp {
+public:
+  OutputQueue() : SharedQueueTemp({"input", "input0", "output"}) {}
+};
+
 class OutputMess {
 public:
-  OutputMess(SharedQueue &queue, const std::string &uri,
+  OutputMess(OutputQueue &queue, const std::string &uri,
              const std::string &uri0, const std::string &uri1)
       : addClient(), addClient0(), inputClient(), sharedQueue(queue),
         outputContainer(), inputHdl(), currentToken(),
@@ -167,7 +117,7 @@ public:
     // 新增：启动输出监听线程，向InputMess发送数据
     std::thread output_thread([this]() {
       while (true) {
-        resultContainer = sharedQueue.pop_output();
+        resultContainer = sharedQueue.pop<MemRef<float, 3>>("output");
         std::lock_guard<std::mutex> lock(hdlMutex); // 加锁保护符号表
         int tokenIndex = currentToken + tokenCnt - 1;
         currentToken++;
@@ -208,7 +158,7 @@ private:
   client addClient;
   client addClient0;
   client inputClient;
-  SharedQueue &sharedQueue;
+  OutputQueue &sharedQueue;
   websocketpp::connection_hdl inputHdl;
   std::mutex hdlMutex; // 保护 hdlsSymbol 的互斥锁
   MemRef<float, 3> resultContainer;
@@ -274,7 +224,7 @@ private:
     auto chunk = getFloatData(msg);
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
-    sharedQueue.push_input(subResultContainer);
+    sharedQueue.push("input", subResultContainer);
     std::cout << "接收到AddMess0数据" << std::endl;
   }
 
@@ -284,7 +234,7 @@ private:
     auto chunk = getFloatData(msg);
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
-    sharedQueue.push_input0(subResultContainer);
+    sharedQueue.push("input0", subResultContainer);
     std::cout << "接收到AddMess1数据" << std::endl;
   }
 
@@ -305,23 +255,23 @@ private:
 //--------------------- Comp (子线程) ---------------------
 class Comp {
 public:
-  Comp(SharedQueue &queue) : sharedQueue(queue), paramsContainer({ParamSize}) {}
+  Comp(OutputQueue &queue) : sharedQueue(queue), paramsContainer({ParamSize}) {}
   void init() { loadAllParameters(); }
   void run() {
     while (true) {
-      MemRef<float, 3> addInput = sharedQueue.pop_input();
-      MemRef<float, 3> addInput0 = sharedQueue.pop_input0();
+      MemRef<float, 3> addInput = sharedQueue.pop<MemRef<float, 3>>("input");
+      MemRef<float, 3> addInput0 = sharedQueue.pop<MemRef<float, 3>>("input0");
       MemRef<float, 3> input0({1, MaxTokenLength, HiddenSize});
       MemRef<float, 3> resultContainer({1, MaxTokenLength, HiddenSize});
       input0.concatenateMemRefs(addInput, addInput0, input0, 1);
       _mlir_ciface_forward193(&resultContainer, &paramsContainer, &input0);
       std::cout << "forward193 computed." << std::endl;
-      sharedQueue.push_output(resultContainer);
+      sharedQueue.push("output", resultContainer);
     }
   }
 
 private:
-  SharedQueue &sharedQueue;
+  OutputQueue &sharedQueue;
   MemRef<float, 1> paramsContainer;
 
   void loadAllParameters() {
