@@ -1,10 +1,11 @@
 #ifndef LLAMAMHA_H // 作用：防止llamaMHA.h被重复引用
 #define LLAMAMHA_H
+#include "BaseDisModel.h"
+#include "SharedQueueTemp.h"
 #include <any>
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
-#include "BaseDisModel.h"
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -23,7 +24,6 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
-#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -46,9 +46,9 @@ extern "C" void _mlir_ciface_forward2(MemRef<float, 2> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *, MemRef<float, 2> *);
 
 //--------------------- MHAMess (主线程) ---------------------
-class MHAQueue : public SharedQueueTemp{
+class MHAQueue : public SharedQueueTemp {
 public:
-  MHAQueue() : SharedQueueTemp({"input", "input0", "input1", "output"}){}
+  MHAQueue() : SharedQueueTemp({"input", "input0", "input1", "output"}) {}
 };
 
 class MHAMess {
@@ -146,17 +146,12 @@ public:
         MemRef<float, 2> subResultContainer1({SubMaxTokenLength, HiddenSize});
         resultContainer.splitMemRef(std::move(resultContainer),
                                     subResultContainer0, subResultContainer1, 0,
-                                    20);
-        auto it = hdlsSymbol.find("AddMess0");
-        if (it != hdlsSymbol.end()) {
-          send_data(hdlsSymbol["AddMess0"], dataId++,
-                    {subResultContainer0.getDataVector()});
-          send_data(hdlsSymbol["AddMess1"], dataId++,
-                    {subResultContainer1.getDataVector()});
-          std::cout << "转发成功" << std::endl;
-        } else {
-          std::cout << "AddMess0未连接, 丢弃结果: " << "result" << std::endl;
-        }
+                                    20); 
+        std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+            {"AddMess0", {subResultContainer0.getDataVector()}},
+            {"AddMess1", {subResultContainer1.getDataVector()}}
+          };
+        BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, mhaServer);
       }
     });
     inputClient_thread.join();
@@ -190,36 +185,6 @@ private:
       {1, MaxTokenLength, HiddenSize0}};
   // 表示最近从其他服务器得到的数据块在数据组内的序号
   uint8_t currentSequence;
-
-  void send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
-                 const std::vector<std::vector<float>> &data) {
-    const uint8_t total = data.size();
-
-    if (mhaServer.get_con_from_hdl(hdl)->get_state() !=
-        websocketpp::session::state::open)
-      return;
-
-    for (uint8_t i = 0; i < total; ++i) {
-      const auto &subdata = data[i];
-
-      // 构造协议头
-      std::vector<uint8_t> packet(10); // 4+1+1+4=10字节头
-      memcpy(packet.data(), &dataId, 4);
-      packet[4] = total;
-      packet[5] = i;
-      uint32_t num = subdata.size();
-      memcpy(packet.data() + 6, &num, 4);
-
-      // 添加浮点数据
-      const uint8_t *binaryData =
-          reinterpret_cast<const uint8_t *>(subdata.data());
-      packet.insert(packet.end(), binaryData,
-                    binaryData + subdata.size() * sizeof(float));
-
-      mhaServer.send(hdl, packet.data(), packet.size(),
-                     websocketpp::frame::opcode::binary);
-    }
-  }
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
@@ -341,7 +306,7 @@ public:
       MemRef<float, 3> rmsInput1 = sharedQueue.pop<MemRef<float, 3>>("input1");
       MemRef<float, 3> input0({1, MaxTokenLength, HiddenSize});
       input0.concatenateMemRefs(rmsInput0, rmsInput1, input0, 1);
-      MemRef<float, 2> resultContainer({MaxTokenLength, HiddenSize}); 
+      MemRef<float, 2> resultContainer({MaxTokenLength, HiddenSize});
       _mlir_ciface_forward2(&resultContainer, &paramsContainers[index], &input0,
                             &currentInput2, &currentInput3, &currentInput1);
       std::cout << "第" << index << "次forward2 computed." << std::endl;
@@ -385,8 +350,8 @@ private:
         0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
         0,         4096, 67633152, 0, 131076096};
     size_t group_len = sizeof(paramSize_group) / sizeof(paramSize_group[0]);
-    BaseDisModel::getParameters(paramSize_group, group_len, 33554432,
-                                 splitNum, paramsContainers);
+    BaseDisModel::getParameters(paramSize_group, group_len, 33554432, splitNum,
+                                paramsContainers);
   }
 
   void updateParams() {

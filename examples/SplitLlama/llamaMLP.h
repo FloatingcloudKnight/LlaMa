@@ -1,10 +1,11 @@
 #ifndef LLAMAMLP_H // 作用：防止llamaMLP.h被重复引用
 #define LLAMAMLP_H
+#include "BaseDisModel.h"
+#include "SharedQueueTemp.h"
 #include <any>
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
-#include "BaseDisModel.h"
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -23,7 +24,6 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
-#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -48,7 +48,7 @@ extern "C" void _mlir_ciface_forward5(MemRef<float, 2> *, MemRef<float, 1> *,
 
 class MLPQueue : public SharedQueueTemp {
 public:
-  MLPQueue() : SharedQueueTemp({"input0", "input1", "output"}){}
+  MLPQueue() : SharedQueueTemp({"input0", "input1", "output"}) {}
 };
 
 class MLPMess {
@@ -141,16 +141,10 @@ public:
         resultContainer.splitMemRef(std::move(resultContainer),
                                     subResultContainer0, subResultContainer1, 0,
                                     20);
-        auto it = hdlsSymbol.find("AddMess0");
-        if (it != hdlsSymbol.end()) {
-          send_data(hdlsSymbol["AddMess0"], dataId++,
-                    {subResultContainer0.getDataVector()});
-          send_data(hdlsSymbol["AddMess1"], dataId++,
-                    {subResultContainer1.getDataVector()});
-          std::cout << "转发成功." << std::endl;
-        } else {
-          std::cout << "AddMess0未连接, 丢弃结果." << std::endl;
-        }
+        std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+            {"AddMess0", {subResultContainer0.getDataVector()}},
+          {"AddMess1", {subResultContainer1.getDataVector()}}};
+        BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, mlpServer);
       }
     });
     rmsClient_thread.join();
@@ -174,38 +168,6 @@ private:
   //  确保对dataId的操作是​​原子​​的
   std::atomic<uint32_t> dataId;
   std::mutex dataMutex;
-
-  void send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
-                 const std::vector<std::vector<float>> &data) {
-    const uint8_t total = data.size();
-
-    auto con = mlpServer.get_con_from_hdl(hdl);
-    if (!con || con->get_state() != websocketpp::session::state::open) {
-      std::cerr << "连接已关闭，无法发送数据。" << std::endl;
-      return;
-    }
-
-    for (uint8_t i = 0; i < total; ++i) {
-      const auto &subdata = data[i];
-
-      // 构造协议头
-      std::vector<uint8_t> packet(10); // 4+1+1+2=8字节头
-      memcpy(packet.data(), &dataId, 4);
-      packet[4] = total;
-      packet[5] = i;
-      uint32_t num = subdata.size();
-      memcpy(packet.data() + 6, &num, 4);
-
-      // 添加浮点数据
-      const uint8_t *binaryData =
-          reinterpret_cast<const uint8_t *>(subdata.data());
-      packet.insert(packet.end(), binaryData,
-                    binaryData + subdata.size() * sizeof(float));
-
-      mlpServer.send(hdl, packet.data(), packet.size(),
-                     websocketpp::frame::opcode::binary);
-    }
-  }
 
   void on_server_message(websocketpp::connection_hdl hdl,
                          server::message_ptr msg) {
@@ -289,7 +251,8 @@ private:
 //------------------------------------------------------------------------------
 class Comp {
 public:
-  Comp(MLPQueue &queue, const std::string splitNum = "0") : sharedQueue(queue), splitNum(splitNum) {}
+  Comp(MLPQueue &queue, const std::string splitNum = "0")
+      : sharedQueue(queue), splitNum(splitNum) {}
 
   void init() { loadAllParameters(); }
 
@@ -303,7 +266,7 @@ public:
       _mlir_ciface_forward5(&resultContainer, &paramsContainers[index],
                             &input0);
       std::cout << "第" << index << "次forward5 computed." << std::endl;
-      sharedQueue.push("output",resultContainer);
+      sharedQueue.push("output", resultContainer);
       index = (index + 1) % 32;
     }
   }
@@ -339,20 +302,21 @@ private:
         0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
         0,         4096, 67633152, 0, 131076096};
     size_t group_len = sizeof(paramSize_group) / sizeof(paramSize_group[0]);
-    BaseDisModel::getParameters(paramSize_group, group_len, 67633152,
-                                 splitNum, paramsContainers);
-  //   /// Define directories of vacabulary and parameter file.
-  //   std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
+    BaseDisModel::getParameters(paramSize_group, group_len, 67633152, splitNum,
+                                paramsContainers);
+    //   /// Define directories of vacabulary and parameter file.
+    //   std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
 
-  //   for (int i = 0; i < 194; i++) { // N 为需要生成的数量
-  //     if (paramSize_group[i] == 67633152) {
-  //       std::string paramsDir = llamaBuildDir + "/subgraph" +
-  //                               std::to_string(i) + "_arg" + splitNum + ".data";
-  //       MemRef<float, 1> paramsContainer({paramSize_group[i]});
-  //       loadParameters(paramsDir, paramsContainer);
-  //       paramsContainers.push_back(std::move(paramsContainer));
-  //     }
-  //   }
+    //   for (int i = 0; i < 194; i++) { // N 为需要生成的数量
+    //     if (paramSize_group[i] == 67633152) {
+    //       std::string paramsDir = llamaBuildDir + "/subgraph" +
+    //                               std::to_string(i) + "_arg" + splitNum +
+    //                               ".data";
+    //       MemRef<float, 1> paramsContainer({paramSize_group[i]});
+    //       loadParameters(paramsDir, paramsContainer);
+    //       paramsContainers.push_back(std::move(paramsContainer));
+    //     }
+    //   }
   }
 };
 
