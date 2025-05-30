@@ -56,7 +56,6 @@ model = model.eval()
 # Initialize Dynamo Compiler with specific configurations as an importer.
 dynamo_compiler = DynamoCompiler(
     primary_registry=tosa.ops_registry,
-    verbose = True,
 )
 
 data = torch.randn([1, 1, 28, 28])
@@ -64,36 +63,41 @@ data = torch.randn([1, 1, 28, 28])
 with torch.no_grad():
     graphs = dynamo_compiler.importer(model, data)
 
+pattern_list = [apply_classic_fusion]
+graphs[0].fuse_ops(pattern_list)
+
 graph = graphs[0]
-for i, op in enumerate(graph._body):
-    print(i, op)
 params = dynamo_compiler.imported_params[graph]
 new_group = [graph._body[11]]
 subgraph_name = "subgraph0"
 graph.group_map_device[subgraph_name] = DeviceType.CPU
 graph.op_groups[subgraph_name] = new_group
 
-graph = graphs[0]
 params = dynamo_compiler.imported_params[graph]
-new_group = [graph._body[12], graph._body[13]]
+new_group = [graph._body[12],graph._body[13]]
 subgraph_name = "subgraph1"
 graph.group_map_device[subgraph_name] = DeviceType.CPU
 graph.op_groups[subgraph_name] = new_group
 
-graph = graphs[0]
 params = dynamo_compiler.imported_params[graph]
-new_group = [graph._body[14]]
+new_group = [graph._body[14], graph._body[15], graph._body[16],graph._body[17]]
 subgraph_name = "subgraph2"
+graph.group_map_device[subgraph_name] = DeviceType.CPU
+graph.op_groups[subgraph_name] = new_group
+
+params = dynamo_compiler.imported_params[graph]
+new_group = [graph._body[18],graph._body[19]]
+subgraph_name = "subgraph3"
 graph.group_map_device[subgraph_name] = DeviceType.CPU
 graph.op_groups[subgraph_name] = new_group
 group = []
 
 for i, op in enumerate(graph._body):
-    if isinstance(op, PlaceholderOp) or isinstance(op, OutputOp) or i == 11 or i == 12 or i == 13 or i == 14:
+    if isinstance(op, PlaceholderOp) or isinstance(op, OutputOp) or i < 20:
         continue
     print(i, op)
     group.append(op)
-    subgraph_name = "subgraph3"
+    subgraph_name = "subgraph4"
     graph.group_map_device[subgraph_name] = DeviceType.CPU
     graph.op_groups[subgraph_name] = group
 

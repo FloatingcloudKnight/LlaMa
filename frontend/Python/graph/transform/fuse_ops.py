@@ -45,7 +45,7 @@ def classic_fuse_check(graph: Graph):
     """
     for op in graph.body:
         pattern = None
-        if isinstance(op, MatmulOp):
+        if isinstance(op, (MatmulOp, AddMMOp)):
             parentop = [graph.node_table[str(i)] for i in op._parents]
             for target in parentop:
                 if isinstance(target, PermuteOp) and target.args[
@@ -106,13 +106,13 @@ def apply_classic_fusion(graph: Graph):
     device = DeviceType.CPU
     # Run the first round of op fusion
     classic_fuse_check(graph)
-    for op in graph.body:
-        if isinstance(op, PlaceholderOp):
-            continue
-        new_op_group.append(op)
-    graph.op_groups = {}
-    graph.op_groups["subgraph0"] = new_op_group
-    graph.group_map_device = {"subgraph0": device}
+    # for op in graph.body:
+    #     if isinstance(op, PlaceholderOp):
+    #         continue
+    #     new_op_group.append(op)
+    # graph.op_groups = {}
+    # graph.op_groups["subgraph0"] = new_op_group
+    # graph.group_map_device = {"subgraph0": device}
 
 
 def simply_fuse(graph: Graph):

@@ -29,7 +29,8 @@
 constexpr size_t ParamsSize0 = 156;
 constexpr size_t ParamsSize1 = 0;
 constexpr size_t ParamsSize2 = 2416;
-constexpr size_t ParamsSize3 = 41854;
+constexpr size_t ParamsSize3 = 30840;
+constexpr size_t ParamsSize4 = 11014;
 
 const std::string ImgName = "1-28*28.png";
 
@@ -42,9 +43,12 @@ extern "C" void _mlir_ciface_forward1(MemRef<float, 4> *output1,
 extern "C" void _mlir_ciface_forward2(MemRef<float, 4> *output2,
                                      MemRef<float, 1> *arg2,
                                      MemRef<float, 4> *output1);
-extern "C" void _mlir_ciface_forward3(MemRef<float, 2> *output,
-                                     MemRef<float, 1> *arg1,
-                                     MemRef<float, 4> *output2);
+extern "C" void _mlir_ciface_forward3(MemRef<float, 2> *output3,
+                                    MemRef<float, 1> *arg3,
+                                    MemRef<float, 4> *output2);
+extern "C" void _mlir_ciface_forward4(MemRef<float, 2> *output,
+                                     MemRef<float, 1> *arg4,
+                                     MemRef<float, 2> *output3);
 /// Print [Log] label in bold blue format.
 void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
 
@@ -110,7 +114,9 @@ int main() {
   intptr_t sizesOutput[2] = {1, 10};
   intptr_t sizesOutput0[4] = {1, 6, 24, 24};
   intptr_t sizesOutput1[4] = {1, 6, 12, 12};
-  intptr_t sizesOutput2[4] = {1, 16, 8, 8};
+  intptr_t sizesOutput2[4] = {1, 16, 4, 4};
+  intptr_t sizesOutput3[2] = {1, 120};
+
 
   // Create input and output containers for the image and model output.
   std::string lenetDir = LENET_EXAMPLE_PATH;
@@ -121,6 +127,7 @@ int main() {
   MemRef<float, 4> output0(sizesOutput0, 0.0f);
   MemRef<float, 4> output1(sizesOutput1, 0.0f);
   MemRef<float, 4> output2(sizesOutput2, 0.0f);
+  MemRef<float, 2> output3(sizesOutput3, 0.0f);
 
 
   // Load model parameters from the specified file.
@@ -138,37 +145,51 @@ int main() {
   std::string paramsDir3 = lenetBuildDir + "/arg3.data";
   MemRef<float, 1> paramsContainer3({ParamsSize3});
   loadParameters(paramsDir3, paramsContainer3);
-
-  // Call the forward function of the model.
-  const auto forward0Start = std::chrono::high_resolution_clock::now();
-  _mlir_ciface_forward0(&output0, &paramsContainer0, &input);
-  const auto forward0End = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> forward0Time = forward0End - forward0Start;
-  printLogLabel();
-  std::cout << "Forward0 execution time: " << forward0Time.count() << " ms\n";
-
-  const auto forward1Start = std::chrono::high_resolution_clock::now();
-  _mlir_ciface_forward1(&output1, &output0);
-  const auto forward1End = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> forward1Time = forward1End - forward1Start;
-  printLogLabel();
-  std::cout << "Forward1 execution time: " << forward1Time.count() << " ms\n";
+  std::string paramsDir4 = lenetBuildDir + "/arg4.data";
+  MemRef<float, 1> paramsContainer4({ParamsSize4});
+  loadParameters(paramsDir4, paramsContainer4);
   
-  const auto forward2Start = std::chrono::high_resolution_clock::now();
+  // Timing forward0
+  auto t0_start = std::chrono::high_resolution_clock::now();
+  _mlir_ciface_forward0(&output0, &paramsContainer0, &input);
+  auto t0_end = std::chrono::high_resolution_clock::now();
+  std::cout << "[Time] forward0: "
+            << std::chrono::duration<double, std::milli>(t0_end - t0_start).count()
+            << " ms" << std::endl;
+
+  // Timing forward1
+  auto t1_start = std::chrono::high_resolution_clock::now();
+  _mlir_ciface_forward1(&output1, &output0);
+  auto t1_end = std::chrono::high_resolution_clock::now();
+  std::cout << "[Time] forward1: "
+            << std::chrono::duration<double, std::milli>(t1_end - t1_start).count()
+            << " ms" << std::endl;
+
+  // Timing forward2
+  auto t2_start = std::chrono::high_resolution_clock::now();
   _mlir_ciface_forward2(&output2, &paramsContainer2, &output1);
-  const auto forward2End = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> forward2Time = forward2End - forward2Start;
-  printLogLabel();
-  std::cout << "Forward2 execution time: " << forward2Time.count() << " ms\n";
+  auto t2_end = std::chrono::high_resolution_clock::now();
+  std::cout << "[Time] forward2: "
+            << std::chrono::duration<double, std::milli>(t2_end - t2_start).count()
+            << " ms" << std::endl;
 
-  const auto forward3Start = std::chrono::high_resolution_clock::now();
-  _mlir_ciface_forward3(&output, &paramsContainer3, &output2);
-  const auto forward3End = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> forward3Time = forward3End - forward3Start;
-  printLogLabel();
-  std::cout << "Forward3 execution time: " << forward3Time.count() << " ms\n";
 
-  std::cout <<  forward0Time.count()+forward1Time.count()+forward2Time.count()+forward3Time.count() << " ms\n";
+  // Timing forward4
+  auto t4_start = std::chrono::high_resolution_clock::now();
+  _mlir_ciface_forward3(&output3, &paramsContainer3, &output2);
+  auto t4_end = std::chrono::high_resolution_clock::now();
+  std::cout << "[Time] forward4: "
+            << std::chrono::duration<double, std::milli>(t4_end - t4_start).count()
+            << " ms" << std::endl;
+
+  // Timing forward5
+  auto t5_start = std::chrono::high_resolution_clock::now();
+  _mlir_ciface_forward4(&output, &paramsContainer4, &output3);
+  auto t5_end = std::chrono::high_resolution_clock::now();
+  std::cout << "[Time] forward5: "
+            << std::chrono::duration<double, std::milli>(t5_end - t5_start).count()
+            << " ms" << std::endl;
+
 
   // Apply softmax to the output logits to get probabilities.
   auto out = output.getData();
