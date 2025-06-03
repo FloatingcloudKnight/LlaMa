@@ -1,5 +1,6 @@
-#ifndef SHAREDQUEUE_TEMP_H
-#define SHAREDQUEUE_TEMP_H
+#ifndef SHAREDQUEUETEMP_H
+#define SHAREDQUEUETEMP_H
+
 #include <any>
 #include <condition_variable>
 #include <map>
@@ -8,12 +9,12 @@
 #include <stdexcept>
 #include <string>
 
-// using namespace buddy;
-/// 通用共享内存类：用于线程间通信
+/// Generic shared memory classes: for inter-thread communication
+
 class SharedQueueTemp {
 public:
-  /// 构造函数：传入你希望支持的队列名称，如 {"input", "input0", "input1",
-  /// "output"}
+  /// Constructor: pass the name of the queue you wish to support, e.g.
+  /// {"input", "input0", "input1", "output"}
   SharedQueueTemp(const std::vector<std::string> &queueNames) {
     for (const auto &name : queueNames) {
       queues[name] = std::queue<std::any>();
@@ -22,7 +23,6 @@ public:
     }
   }
 
-  /// 向指定队列 push 数据（任何类型）
   template <typename T> void push(const std::string &queueName, const T &data) {
     checkQueueExists(queueName);
     {
@@ -32,7 +32,6 @@ public:
     cvs[queueName]->notify_one();
   }
 
-  /// 从指定队列 pop 数据（阻塞，直到有数据）
   template <typename T> T pop(const std::string &queueName) {
     checkQueueExists(queueName);
     std::unique_lock<std::mutex> lock(*mutexes[queueName]);

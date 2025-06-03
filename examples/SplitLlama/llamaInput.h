@@ -13,11 +13,12 @@
 // limitations under the License.
 //
 //===----------------------------------------------------------------------===//
+#include "BaseDisModel.h"
+#include "SharedQueueTemp.h"
 #include <any>
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
-#include "BaseDisModel.h"
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -36,7 +37,6 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
-#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -81,27 +81,6 @@ void getUserInput(std::string &inputStr) {
 /// Print [Log] label in bold blue format.
 void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
 
-/// Print information for each iteration.
-void printIterInfo(size_t iterIdx, std::string str) {
-  std::cout << "\033[32;1m[Iteration " << iterIdx << "] \033[0m";
-  std::cout << "Token: " << str << std::endl;
-}
-
-/// Tokenize input data in the container.
-void tokenizeInput(const std::string &vocabFile,
-                   Text<size_t, 2> &inputContainer) {
-  printLogLabel();
-  std::cout << "Vocab file: " << std::filesystem::canonical(vocabFile)
-            << std::endl;
-  const auto buddyTokenizeStart = std::chrono::high_resolution_clock::now();
-  inputContainer.tokenizeLlama(vocabFile, MaxTokenLength);
-  const auto buddyTokenizeEnd = std::chrono::high_resolution_clock::now();
-  const std::chrono::duration<double, std::milli> buddyTokenizeTime =
-      buddyTokenizeEnd - buddyTokenizeStart;
-  printLogLabel();
-  std::cout << "Tokenize time: " << buddyTokenizeTime.count() << "ms"
-            << std::endl;
-}
 
 //--------------------- InputMess (主线程) ---------------------
 class InputQueue : public SharedQueueTemp {
@@ -142,7 +121,7 @@ public:
     // 新增：启动输出监听线程，向RMSMess发送数据
     std::thread output_thread([this]() {
       while (true) {
-        resultContainerPtr = shared_queue.pop<MemRefContainer*>("output");
+        resultContainerPtr = shared_queue.pop<MemRefContainer *>("output");
         memRef3D0 = resultContainerPtr->memRef3D0;
         memRef2D = resultContainerPtr->memRef2D;
         memRef3D1 = resultContainerPtr->memRef3D1;
@@ -151,27 +130,16 @@ public:
                               subResultContainer1, 1, 20);
 
         std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
-        auto it = hdlsSymbol.find("RMSMess0");
-        if (it != hdlsSymbol.end()) {
-          try {
-            send_data(hdlsSymbol["RMSMess0"], dataId++,
-                      {subResultContainer0.getDataVector()});
-            send_data(hdlsSymbol["RMSMess1"], dataId++,
-                      {subResultContainer1.getDataVector()});
-            std::cout << "成功向RMSMess发送数据" << std::endl;
-            send_data(hdlsSymbol["MHAMess0"], dataId++,
-                      {memRef2D.getDataVector(), memRef3D1.getDataVector(),
-                       memRef3D2.getDataVector()});
-            send_data(hdlsSymbol["MHAMess1"], dataId++,
-                      {memRef2D.getDataVector(), memRef3D1.getDataVector(),
-                       memRef3D2.getDataVector()});
-            std::cout << "成功向MHAMess发送数据" << std::endl;
-          } catch (const websocketpp::exception &e) {
-            std::cout << "转发失败: " << e.what() << std::endl;
-          }
-        } else {
-          std::cout << "RMSMess未连接, 丢弃结果: " << "result" << std::endl;
-        }
+        std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+            {"RMSMess0", {subResultContainer0.getDataVector()}},
+            {"RMSMess1", {subResultContainer1.getDataVector()}},
+            {"MHAMess0",
+             {memRef2D.getDataVector(), memRef3D1.getDataVector(),
+              memRef3D2.getDataVector()}},
+            {"MHAMess1",
+             {memRef2D.getDataVector(), memRef3D1.getDataVector(),
+              memRef3D2.getDataVector()}}};
+        BaseDisModel::sendToClient(sendMap, hdlsSymbol,  dataId, inputServer);
       }
     });
 
@@ -204,36 +172,6 @@ private:
   //  确保对dataId的操作是​​原子​​的
   std::atomic<uint32_t> dataId;
 
-  void send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
-                 const std::vector<std::vector<float>> &data) {
-    const uint8_t total = data.size();
-
-    if (inputServer.get_con_from_hdl(hdl)->get_state() !=
-        websocketpp::session::state::open)
-      return;
-
-    for (uint8_t i = 0; i < total; ++i) {
-      const auto &subdata = data[i];
-
-      // 构造协议头
-      std::vector<uint8_t> packet(10); // 4+1+1+2=8字节头
-      memcpy(packet.data(), &dataId, 4);
-      packet[4] = total;
-      packet[5] = i;
-      uint32_t num = subdata.size();
-      memcpy(packet.data() + 6, &num, 4);
-
-      // 添加浮点数据
-      const uint8_t *binaryData =
-          reinterpret_cast<const uint8_t *>(subdata.data());
-      packet.insert(packet.end(), binaryData,
-                    binaryData + subdata.size() * sizeof(float));
-
-      inputServer.send(hdl, packet.data(), packet.size(),
-                       websocketpp::frame::opcode::binary);
-    }
-  }
-
   void on_server_message(websocketpp::connection_hdl hdl,
                          server::message_ptr msg) {
     std::string payload = msg->get_payload();
@@ -254,23 +192,16 @@ private:
       getUserInput(inputStr);
       // 创建并tokenize输入容器
       inputContainer = Text<size_t, 2>(inputStr);
-      tokenizeInput(vocabDir, inputContainer);
+      BaseDisModel::tokenizeInput(vocabDir, inputContainer, MaxTokenLength);
       // 将输入压入队列
       shared_queue.push("input", inputContainer);
+      // 发送 token 数量到 Output 模块
       int tokenCnt = inputContainer.getTokenCnt();
       inputServer.send(hdl, std::to_string(tokenCnt),
                        websocketpp::frame::opcode::text);
+
     } else {
-      // 获取客户端类型
-      int maxIndex = std::stoi(payload);
-      // Determine the generated token.
-      int tokenIndex = inputContainer.getTokenCnt() - 1;
-      std::string tok = inputContainer.getStr(maxIndex);
-      printIterInfo(tokenIndex, tok);
-
-      // Append the generated token into the input and output container.
-      inputContainer.appendTokenIdx(maxIndex);
-
+      BaseDisModel::appendToken(inputContainer, payload);
       shared_queue.push("input", inputContainer);
     }
   }
@@ -281,9 +212,7 @@ class Comp {
 public:
   Comp(InputQueue &queue, MemRefContainer *resultContainerPtr)
       : shared_queue(queue), resultContainerPtr(resultContainerPtr),
-        paramsContainer({ParamSize}) {
-    
-  }
+        paramsContainer({ParamSize}) {}
   void init() { loadAllParameters(); }
   void run() {
     while (true) {

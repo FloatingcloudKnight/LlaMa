@@ -1,6 +1,7 @@
 #ifndef LLAMAOUTPUT_H // 作用：防止llamaOutput.h被重复引用
 #define LLAMAOUTPUT_H
 #include "BaseDisModel.h"
+#include "SharedQueueTemp.h"
 #include <any>
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
@@ -23,7 +24,6 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
-#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -40,6 +40,7 @@ constexpr size_t HiddenSize = 4096;
 constexpr size_t HiddenSize0 = 128;
 constexpr size_t HiddenSize1 = 41;
 constexpr size_t ParamSize = 131076096;
+constexpr size_t separatorTokenIndex = 2;
 
 /// Print [Log] label in bold blue format.
 void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
@@ -47,12 +48,6 @@ void printLogLabel() { std::cout << "\033[34;1m[Log] \033[0m"; }
 /// Declare LLaMA forward function.
 extern "C" void _mlir_ciface_forward193(MemRef<float, 3> *, MemRef<float, 1> *,
                                         MemRef<float, 3> *);
-
-/// Find the index of the max value.
-int findMaxIndex(const float *start, const float *end) {
-  return std::distance(start, std::max_element(start, end));
-}
-
 
 //--------------------- OutputMess (主线程) ---------------------
 class OutputQueue : public SharedQueueTemp {
@@ -119,28 +114,18 @@ public:
       while (true) {
         resultContainer = sharedQueue.pop<MemRef<float, 3>>("output");
         std::lock_guard<std::mutex> lock(hdlMutex); // 加锁保护符号表
-        int tokenIndex = currentToken + tokenCnt - 1;
-        currentToken++;
-        // Determine the generated token.
-        const float *startPtr =
-            resultContainer.getData() + tokenIndex * MaxVocabSize;
-        const float *endPtr = startPtr + MaxVocabSize;
-        int maxIndex = findMaxIndex(startPtr, endPtr);
 
-        // Stop if a separator token (2, </s>) or line break token (13 <0x0A>)
-        // is generated.
-        if (maxIndex == 2) {
-          break;
-        }
-        // Append the generated token into the input and output container.
-        outputContainer.appendTokenIdx(maxIndex);
+        int generate = BaseDisModel::generatedToken(resultContainer, outputContainer,
+                                     currentToken, tokenCnt, MaxVocabSize, separatorTokenIndex);
+        if (generate < 0) break;
+
 
         if (currentToken == (MaxTokenLength - tokenCnt)) {
           std::cout << "\033[33;1m[Output]\033[0m "
                     << outputContainer.revertLlama() << std::endl;
           currentToken = 0;
         } else if (currentToken < (MaxTokenLength - tokenCnt)) {
-          inputClient.send(inputHdl, std::to_string(maxIndex),
+          inputClient.send(inputHdl, std::to_string(generate),
                            websocketpp::frame::opcode::text);
           std::cout << "第" << currentToken << "次Token推理完成." << std::endl;
         } else {

@@ -1,10 +1,11 @@
 #ifndef LLAMARMS_H // 作用：防止llamaRMS.h被重复引用
 #define LLAMARMS_H
+#include "BaseDisModel.h"
+#include "SharedQueueTemp.h"
 #include <any>
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
-#include "BaseDisModel.h"
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
@@ -23,7 +24,6 @@
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
-#include "SharedQueueTemp.h"
 
 using namespace buddy;
 using websocketpp::lib::bind;
@@ -44,23 +44,19 @@ constexpr size_t HiddenSize1 = 41;
 extern "C" void _mlir_ciface_forward1(MemRef<float, 3> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *);
 
-
 //--------------------- RMSMess (主线程) ---------------------
 
 class RMSQueue : public SharedQueueTemp {
 
 public:
-
   RMSQueue() : SharedQueueTemp({"input", "output"}) {}
-
 };
 
 class RMSMess {
 public:
   RMSMess(const std::string name, RMSQueue &queue, const uint16_t &port,
           const std::string &uri)
-      : queue(queue), rmsServer(), name(name), inputClient(), 
-        hdlsSymbol(),
+      : queue(queue), rmsServer(), name(name), inputClient(), hdlsSymbol(),
         resultContainer(MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize})),
         dataId(0) {
     /// 服务器初始化
@@ -112,22 +108,12 @@ public:
       while (true) {
         resultContainer = queue.pop<MemRef<float, 3>>("output");
         std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
-        if (hdlsSymbol.find("MHAMess0") != hdlsSymbol.end()) {
-          send_data(hdlsSymbol["MHAMess0"], dataId++,
-                    {resultContainer.getDataVector()});
-          send_data(hdlsSymbol["MHAMess1"], dataId++,
-                    {resultContainer.getDataVector()});
-          std::cout << name << "转发" << "MHAMess" << "成功" << std::endl;
-        } else if (hdlsSymbol.find("MLPMess0") != hdlsSymbol.end()) {
-          send_data(hdlsSymbol["MLPMess0"], dataId++,
-                    {resultContainer.getDataVector()});
-          send_data(hdlsSymbol["MLPMess1"], dataId++,
-                    {resultContainer.getDataVector()});
-          std::cout << name << "转发" << "MLPMess" << "成功" << std::endl;
-        } else {
-          std::cout << "MHAMess0或MLPMess0未连接, 丢弃结果: " << "result"
-                    << std::endl;
-        }
+        std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+            {"MHAMess0", {resultContainer.getDataVector()}},
+            {"MHAMess1", {resultContainer.getDataVector()}},
+            {"MLPMess0", {resultContainer.getDataVector()}},
+            {"MLPMess1", {resultContainer.getDataVector()}}};
+        BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, rmsServer);
       }
     });
 
@@ -156,36 +142,6 @@ private:
   std::vector<intptr_t> inputSizes = {{1, SubMaxTokenLength, HiddenSize}};
   // 是否是第一个rms模块
   bool isFirst;
-
-  void send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
-                 const std::vector<std::vector<float>> &data) {
-    const uint8_t total = data.size();
-
-    if (rmsServer.get_con_from_hdl(hdl)->get_state() !=
-        websocketpp::session::state::open)
-      return;
-
-    for (uint8_t i = 0; i < total; ++i) {
-      const auto &subdata = data[i];
-
-      // 构造协议头
-      std::vector<uint8_t> packet(10); // 4+1+1+2=8字节头
-      memcpy(packet.data(), &dataId, 4);
-      packet[4] = total;
-      packet[5] = i;
-      uint32_t num = subdata.size();
-      memcpy(packet.data() + 6, &num, 4);
-
-      // 添加浮点数据
-      const uint8_t *binaryData =
-          reinterpret_cast<const uint8_t *>(subdata.data());
-      packet.insert(packet.end(), binaryData,
-                    binaryData + subdata.size() * sizeof(float));
-
-      rmsServer.send(hdl, packet.data(), packet.size(),
-                     websocketpp::frame::opcode::binary);
-    }
-  }
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
@@ -262,14 +218,9 @@ private:
       std::cout << "接收到AddMess数据" << std::endl;
       {
         std::lock_guard<std::mutex> lockMutex(symbolMutex); // 加锁保护符号表
-        auto it = hdlsSymbol.find("AddMess");
-        if (it != hdlsSymbol.end()) {
-          send_data(hdlsSymbol["AddMess"], dataId++,
-                    {subResultContainer.getDataVector()});
-          std::cout << name << "转发AddMess成功." << std::endl;
-        } else {
-          std::cout << "AddMess未连接, 丢弃结果." << std::endl;
-        }
+        std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+            {"AddMess", {subResultContainer.getDataVector()}}};
+        BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, rmsServer);
       }
       queue.push<MemRef<float, 3>>("input", subResultContainer);
     }
@@ -284,14 +235,9 @@ private:
     std::cout << "接收到InputMess数据" << std::endl;
     {
       std::lock_guard<std::mutex> lockMutex(symbolMutex); // 加锁保护符号表
-      auto it = hdlsSymbol.find("AddMess");
-      if (it != hdlsSymbol.end()) {
-        send_data(hdlsSymbol["AddMess"], dataId++,
-                  {subResultContainer.getDataVector()});
-        std::cout << name << "转发AddMess成功." << std::endl;
-      } else {
-        std::cout << "AddMess未连接, 丢弃结果." << std::endl;
-      }
+      std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+          {"AddMess", {subResultContainer.getDataVector()}}};
+      BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, rmsServer);
     }
     queue.push<MemRef<float, 3>>("input", subResultContainer);
   }
@@ -304,7 +250,7 @@ class Comp {
 public:
   Comp(RMSQueue &queue, const int rmsNum) : queue(queue), rmsNum(rmsNum) {}
 
-  void init() {loadAllParameters();}
+  void init() { loadAllParameters(); }
 
   void run() {
     while (true) {
@@ -323,7 +269,7 @@ private:
   uint32_t index = 0;
   const int rmsNum;
 
-  void loadAllParameters(){
+  void loadAllParameters() {
     constexpr size_t paramSize_group[] = {
         131072064, 4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
         0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
