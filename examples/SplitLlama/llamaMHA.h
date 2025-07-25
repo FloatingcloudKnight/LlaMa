@@ -53,10 +53,10 @@ public:
 
 class MHAMess {
 public:
-  MHAMess(const std::string name, MHAQueue &queue, const uint16_t &port,
+  MHAMess(const std::string name, MHAQueue &queue, const uint32_t &port,
           const std::string &uri0, const std::string &uri1,
           const std::string &uri2)
-      : mhaServer(), name(name), sharedQueue(queue), hdlsSymbol(),
+      : mhaServer(), name(name), port(port), sharedQueue(queue), hdlsSymbol(),
         resultContainer(MemRef<float, 2>({MaxTokenLength, HiddenSize})),
         dataId(0) {
     /// 服务器初始化
@@ -141,16 +141,15 @@ public:
     std::thread output_thread([this]() {
       while (true) {
         resultContainer = sharedQueue.pop<MemRef<float, 2>>("output");
-        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+        std::lock_guard<std::mutex> lock(symbolMutex);
         MemRef<float, 2> subResultContainer0({SubMaxTokenLength, HiddenSize});
         MemRef<float, 2> subResultContainer1({SubMaxTokenLength, HiddenSize});
         resultContainer.splitMemRef(std::move(resultContainer),
                                     subResultContainer0, subResultContainer1, 0,
-                                    20); 
+                                    20);
         std::map<std::string, std::vector<std::vector<float>>> sendMap = {
             {"AddMess0", {subResultContainer0.getDataVector()}},
-            {"AddMess1", {subResultContainer1.getDataVector()}}
-          };
+            {"AddMess1", {subResultContainer1.getDataVector()}}};
         BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, mhaServer);
       }
     });
@@ -167,12 +166,14 @@ private:
   client rmsClient;
   client rmsClient0;
   const std::string name;
+  const uint32_t port;
   MHAQueue &sharedQueue;
   std::map<std::string, websocketpp::connection_hdl> hdlsSymbol;
   std::map<websocketpp::connection_hdl, std::string,
            std::owner_less<websocketpp::connection_hdl>>
       connections;
-  std::mutex symbolMutex; // 保护 hdlsSymbol 的互斥锁
+  // 保护 hdlsSymbol 的互斥锁
+  std::mutex symbolMutex;
   MemRef<float, 2> resultContainer;
   //  确保对dataId的操作是​​原子​​的
   std::atomic<uint32_t> dataId;
@@ -237,7 +238,7 @@ private:
                          server::message_ptr msg) {
     std::string payload = msg->get_payload();
     if (payload.find("AddMess") != std::string::npos) {
-      std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+      std::lock_guard<std::mutex> lock(symbolMutex);
       hdlsSymbol[payload] = hdl;
       connections[hdl] = payload;
       std::cout << payload << " 已连接" << std::endl;

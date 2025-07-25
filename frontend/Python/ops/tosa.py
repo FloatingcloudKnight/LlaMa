@@ -1689,18 +1689,6 @@ def scaled_dot_product_flash_attention_for_cpu_op(
     key_shape = list(key.type.shape)
     perm_list = list(range(len(key_shape)))
     perm_list[-1], perm_list[-2] = perm_list[-2], perm_list[-1]
-    perm_const_op = tosa.ConstOp(
-        ir.DenseElementsAttr.get(memoryview(array.array("i", perm_list)))
-    )
-    perm_shape = []
-    perm_shape.append(key_shape[0])
-    perm_shape.append(key_shape[1])
-    perm_shape.append(key_shape[3])
-    perm_shape.append(key_shape[2])
-    permute_result_type = ir.RankedTensorType.get(perm_shape, mlir_dtype)
-    key = tosa.TransposeOp(
-        permute_result_type, key, perm_const_op.results[0]
-    ).result
 
     # Matrix multiplication of query and key
     query_reshape_op = tosa.ReshapeOp(
@@ -1720,31 +1708,35 @@ def scaled_dot_product_flash_attention_for_cpu_op(
         key,
         memoryview(
             array.array(
-                "i", [key_shape[0] * key_shape[1], key_shape[3], key_shape[2]]
+                "i", [key_shape[0] * key_shape[1], key_shape[2], key_shape[3]]
             )
         ),
     )
-    matmul_result_shp = [
+    batch_matmul_result_shp = [
         key_shape[0] * key_shape[1],
         query_shape[2],
         key_shape[2],
     ]
-    matmul_result_type = ir.RankedTensorType.get(matmul_result_shp, mlir_dtype)
-    matmul_op = tosa.MatMulOp(
-        matmul_result_type, query_reshape_op.result, key_reshape_op.result
+    
+    batch_matmul_result_type = ir.RankedTensorType.get(batch_matmul_result_shp, mlir_dtype)
+    element = mlir_element_attr_get(dtype, 0.0)
+    attr = ir.DenseElementsAttr.get_splat(batch_matmul_result_type, element)
+    output_buffer = arith.ConstantOp(batch_matmul_result_type, attr).result
+    batch_matmul_transpose_b_op = linalg.batch_matmul_transpose_b(
+        query_reshape_op.result, key_reshape_op.result, outs=[output_buffer],
     )
     # Multiply result by scale factor
     scale_factor_constant = arith.ConstantOp(mlir_dtype, scale_factor)
-    scale_factor = tensor.SplatOp(matmul_result_type, scale_factor_constant)
+    scale_factor = tensor.SplatOp(batch_matmul_result_type, scale_factor_constant)
     mul_op = tosa.MulOp(
-        matmul_result_type,
-        matmul_op,
+        batch_matmul_result_type,
+        batch_matmul_transpose_b_op,
         scale_factor,
         ir.IntegerAttr.get(ir.IntegerType.get_signless(8), 0),
     )
 
     # Add attention bias to the result
-    add_op = tosa.AddOp(matmul_result_type, mul_op.result, attn_bias)
+    add_op = tosa.AddOp(batch_matmul_result_type, mul_op.result, attn_bias)
     # Apply softmax to the result
     softmax_output_shape = list(add_op.result.type.shape)
     softmax_dim = len(softmax_output_shape) - 1

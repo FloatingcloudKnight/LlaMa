@@ -145,8 +145,8 @@ int main() {
   //  - Perform the forward function.
   //  - Find and append the generated token.
   //  - Continue iterating until the terminal condition is met.
-  int generateLen = MaxTokenLength - inputContainer.getTokenCnt();
-  for (int i = 0; i < generateLen; i++) {
+  // int generateLen = MaxTokenLength - inputContainer.getTokenCnt();
+  for (int i = 0; i < 5; i++) {
     const auto inferenceStart = std::chrono::high_resolution_clock::now();
     // Execute the forward pass of the model.
     _mlir_ciface_forward(&resultContainer, &paramsContainer, &inputContainer);

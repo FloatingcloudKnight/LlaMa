@@ -108,12 +108,17 @@ public:
       while (true) {
         resultContainer = queue.pop<MemRef<float, 3>>("output");
         std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
-        std::map<std::string, std::vector<std::vector<float>>> sendMap = {
-            {"MHAMess0", {resultContainer.getDataVector()}},
-            {"MHAMess1", {resultContainer.getDataVector()}},
-            {"MLPMess0", {resultContainer.getDataVector()}},
-            {"MLPMess1", {resultContainer.getDataVector()}}};
-        BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, rmsServer);
+        if (hdlsSymbol.find("MHAMess0") != hdlsSymbol.end()) {
+          std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+              {"MHAMess0", {resultContainer.getDataVector()}},
+              {"MHAMess1", {resultContainer.getDataVector()}}};
+          BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, rmsServer);
+        } else if (hdlsSymbol.find("MLPMess0") != hdlsSymbol.end()) {
+          std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+              {"MLPMess0", {resultContainer.getDataVector()}},
+              {"MLPMess1", {resultContainer.getDataVector()}}};
+          BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, rmsServer);
+        }
       }
     });
 
@@ -192,18 +197,18 @@ private:
     if (msg->get_opcode() == websocketpp::frame::opcode::text) {
       std::string payload = msg->get_payload();
       if (payload.find("AddMess") != std::string::npos) {
-        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+        std::lock_guard<std::mutex> lock(symbolMutex);
         hdlsSymbol["AddMess"] = hdl;
         connections[hdl] = payload;
         std::cout << payload << "已连接" << std::endl;
       } else if (payload.find("MHAMess") != std::string::npos ||
                  payload.find("MLPMess") != std::string::npos) {
-        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+        std::lock_guard<std::mutex> lock(symbolMutex);
         hdlsSymbol[payload] = hdl;
         connections[hdl] = payload;
         std::cout << payload << "已连接" << std::endl;
       } else if (payload.find("LastAdd") != std::string::npos) {
-        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+        std::lock_guard<std::mutex> lock(symbolMutex);
         connections[hdl] = payload;
         std::cout << payload << "已连接" << std::endl;
       }

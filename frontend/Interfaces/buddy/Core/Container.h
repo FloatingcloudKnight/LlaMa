@@ -360,6 +360,7 @@ size_t MemRef<T, N>::product(const intptr_t sizes[N]) const {
     size *= sizes[i];
   return size;
 }
+
 template <typename T, size_t N>
 MemRef<T, N>::MemRef(std::unique_ptr<T> &uptr, intptr_t *sizes,
                      intptr_t offset) {
@@ -374,6 +375,7 @@ MemRef<T, N>::MemRef(std::unique_ptr<T> &uptr, intptr_t *sizes,
   }
   setStrides();
 }
+
 template <typename T, size_t N> T *MemRef<T, N>::release() {
   T *temp = allocated;
   aligned = nullptr;

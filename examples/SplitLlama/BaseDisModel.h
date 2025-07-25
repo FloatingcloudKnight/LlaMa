@@ -135,7 +135,8 @@ public:
     return maxIndex;
   }
 
-  static void send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
+  static void
+  send_data(websocketpp::connection_hdl hdl, uint32_t dataId,
             const std::vector<std::vector<float>> &data,
             websocketpp::server<websocketpp::config::asio> &server) {
     const uint8_t total = data.size();
@@ -168,29 +169,66 @@ public:
     }
   }
 
-  static void sendToClient(const std::map<std::string, std::vector<std::vector<float>>> &nameToDataVecs,
-    const std::map<std::string, websocketpp::connection_hdl> &hdlMap,
-                uint32_t dataId,
+  static void
+  sendToClient(const std::map<std::string, std::vector<std::vector<float>>>
+                   &nameToDataVecs,
+               const std::map<std::string, websocketpp::connection_hdl> &hdlMap,
+               uint32_t dataId,
                websocketpp::server<websocketpp::config::asio> &server) {
     for (const auto &[name, dataVecs] : nameToDataVecs) {
       auto it = hdlMap.find(name);
       if (it == hdlMap.end()) {
-        std::cerr << "[Warning] 未找到连接: " << name
-                  << std::endl;
+        std::cerr << "[Warning] 未找到连接: " << name << std::endl;
         continue;
       }
       websocketpp::connection_hdl hdl = it->second;
 
-      // // 调用已有的 send_data 封装
-      // send_data(hdl, dataId, data, server);
       try {
-      send_data(hdl, dataId++, dataVecs, server);
-      std::cout << "成功向"<< name <<"发送数据" << std::endl;
+        send_data(hdl, dataId++, dataVecs, server);
+        std::cout << "成功向" << name << "发送数据" << std::endl;
 
-    } catch (const websocketpp::exception &e) {
-      std::cerr << "[Error] 向 " << name << " 发送失败: " << e.what() << std::endl;
+      } catch (const websocketpp::exception &e) {
+        std::cerr << "[Error] 向 " << name << " 发送失败: " << e.what()
+                  << std::endl;
+      }
     }
+  }
+
+  static void printLog(const uint16_t &port, const std::string &info) {
+    std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/log.txt";
+    std::ofstream file(logDir, std::ios::app);
+    if (!file.is_open()) {
+      std::cerr << "无法打开文件: " << logDir << std::endl;
+      return;
     }
+
+    file << "[Log] port:" << port << '\n';
+    file << "info: " << info << '\n';
+    file.close();
+  }
+
+  static void printDebugLogFile(const uint16_t &port, const std::string &info,
+                                 const std::vector<float> &vec,
+                                 const std::string &filename) {
+    std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/" + filename;
+    std::ofstream file(logDir, std::ios::app);
+    if (!file.is_open()) {
+      std::cerr << "无法打开文件: " << logDir << std::endl;
+      return;
+    }
+
+    file << "[DEBUG] port:" << port << '\n';
+    file << "info: " << info << '\n';
+    // 设置输出格式（固定小数点，保留6位小数）
+    file << "[";
+    file << std::fixed << std::setprecision(6);
+    for (size_t i = 0; i < vec.size(); ++i) {
+      file << vec[i];
+      if (i < vec.size() - 1)
+        file << " ";
+    }
+    file << "]" << '\n';
+    file.close();
   }
 };
 

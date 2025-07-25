@@ -584,6 +584,7 @@ SET_TARGET_PROPERTIES(
   PROPERTIES
   LINKER_LANGUAGE C)
 
+add_executable(buddy-paral-llama-run llama-paral.cpp)
 add_executable(buddy-dis-llama-run llama-main.cpp)
 
 set(LLAMA_DIS_EXAMPLE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
@@ -593,8 +594,13 @@ target_compile_definitions(buddy-dis-llama-run PRIVATE
   LLAMA_DIS_EXAMPLE_PATH="${LLAMA_DIS_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
+target_compile_definitions(buddy-paral-llama-run PRIVATE 
+  LLAMA_DIS_EXAMPLE_PATH="${LLAMA_DIS_EXAMPLE_PATH}" 
+  LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
+)
 
 target_link_directories(buddy-dis-llama-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories(buddy-paral-llama-run PRIVATE ${LLVM_LIBRARY_DIR})
 
 set(BUDDY_DIS_LLAMA_LIBS
   DISLLAMA0
@@ -608,3 +614,4 @@ set(BUDDY_DIS_LLAMA_LIBS
 )
 
 target_link_libraries(buddy-dis-llama-run ${BUDDY_DIS_LLAMA_LIBS})
+target_link_libraries(buddy-paral-llama-run ${BUDDY_DIS_LLAMA_LIBS})

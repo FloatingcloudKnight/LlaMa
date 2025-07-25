@@ -239,12 +239,33 @@ class Graph:
         self.node_table.pop(node.name)
         self.node_table[newnode.name] = newnode
     
-    # 检查两个列表对应位置的元素是否为同一类的实例
-    def are_classes_compatible(self, list_a, list_b):
-        if len(list_a) != len(list_b):
-            return False
-        return all(type(a) is type(b) for a, b in zip(list_a, list_b))
-
+    # 根据主图，识别当前子图的输入节点
+    def infer_graph_inputs(self, op_group: List[Op]) -> List[Op]:
+      inputs = []
+      for op in op_group:
+        for parent in op._parents:
+          op_parent = self.node_table[parent]
+          if (op_parent not in op_group) and (op_parent not in inputs):
+            inputs.append(op_parent)
+      return inputs
+    
+    # 根据主图，识别当前子图的输出节点，并建立子图之间的依赖关系
+    # Identify outputs for each subgraph and build dependencies between subgraphs
+    def infer_subgraph_outputs(self, op_group: List[Op], 
+                               subgraphs_inputs: Dict, 
+                               output_node: List[Op],
+                               dependencies) -> List[Op]:
+      outputs = []
+      for op in op_group:
+        for key in subgraphs_inputs.keys():
+          if op in subgraphs_inputs[key]:
+            if(op not in outputs):
+              outputs.append(op)
+            dependencies.add(key)
+        if (op.name in output_node) and (op not in outputs):
+          outputs.append(op)
+      return outputs
+    
     def fuse_ops(self, pattern_list: List[FunctionType]):
         """
         Fuse operations in the graph based on provided fusion patterns.

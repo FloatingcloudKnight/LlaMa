@@ -32,10 +32,6 @@ from .graph import Graph, GraphImporter, TensorMeta
 from .operation import *
 from .type import *
 
-from .operation import *
-from .type import *
-
-
 class GraphDriver:
     """
     Class responsible for managing and driving the execution of a computational
@@ -162,7 +158,7 @@ class GraphDriver:
       # 对是否需要分割两种情况进行处理
       if self._parallelism < 1:
         raise ValueError(
-          "Parallelism must be greater than or equal to 0")
+            "Parallelism must be greater than or equal to 0")
       elif self._parallelism > 1:
         self.op_groups = {}
         self.group_map_device = {}
@@ -182,9 +178,9 @@ class GraphDriver:
             continue
           
           # todo: Added handling of more complex embedding cases
-          if isinstance(op, PowOp): 
+          if isinstance(op, PowOp):
             pow_count += 1
-            submodel_count += 1 
+            submodel_count += 1
             tsf_count = 1
             subgraph_name = "subgraph{}".format(submodel_count)
             self.group_map_device[subgraph_name] = DeviceType.CPU
@@ -354,7 +350,7 @@ class GraphDriver:
                           if old_len < new_len:
                               new_shape[-2] = old_shape[-1] // new_shape[-1]
                           else:
-                              new_shape = self._infer_new_shape_with_neg_one(old_shape, new_shape)
+                              new_shape = self._infer_new_shape(old_shape, new_shape)
                       self._add_paral_op_shape(node.name, new_shape)
               elif isinstance(node, CatOp) and node != self.op_groups[subgraph_name][-1]:
                   for op_arg in node.args[0]:
