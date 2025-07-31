@@ -32,6 +32,16 @@ public:
     cvs[queueName]->notify_one();
   }
 
+  // 移动push
+  template <typename T> void push(const std::string &queueName, const T &&data) {
+    checkQueueExists(queueName);
+    {
+      std::lock_guard<std::mutex> lock(*mutexes[queueName]);
+      queues[queueName].push(std::move(data));
+    }
+    cvs[queueName]->notify_one();
+  }
+
   template <typename T> T pop(const std::string &queueName) {
     checkQueueExists(queueName);
     std::unique_lock<std::mutex> lock(*mutexes[queueName]);
@@ -40,7 +50,7 @@ public:
     std::any data = queues[queueName].front();
     queues[queueName].pop();
     try {
-      return std::any_cast<T>(data);
+      return std::any_cast<T>(std::move(data));
     } catch (const std::bad_any_cast &e) {
       throw std::runtime_error("Type mismatch in queue '" + queueName +
                                "': " + e.what());

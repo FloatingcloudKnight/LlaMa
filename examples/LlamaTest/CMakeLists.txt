@@ -568,6 +568,182 @@ add_custom_command(
 
 add_library(DISLLAMA5 STATIC forward193.o subgraph193.o)
 
+add_custom_command(
+  OUTPUT forward194.o
+  COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/concat_forward.mlir 
+            -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
+          ${BUDDY_BINARY_DIR}/buddy-opt
+            -arith-expand
+            -eliminate-empty-tensors
+            -empty-tensor-to-alloc-tensor
+            -one-shot-bufferize
+            -matmul-parallel-vectorization-optimize
+            -batchmatmul-optimize
+            -convert-linalg-to-affine-loops
+            -affine-loop-fusion
+            -affine-parallelize
+            -lower-affine
+            -convert-scf-to-openmp
+            -func-bufferize
+            -arith-bufferize
+            -tensor-bufferize
+            -buffer-deallocation
+            -finalizing-bufferize
+            -convert-vector-to-scf
+            -expand-strided-metadata
+            -convert-vector-to-llvm
+            -memref-expand
+            -arith-expand
+            -convert-arith-to-llvm
+            -finalize-memref-to-llvm
+            -convert-scf-to-cf
+            -llvm-request-c-wrappers
+            -convert-openmp-to-llvm
+            -convert-arith-to-llvm
+            -convert-math-to-llvm
+            -convert-math-to-libm 
+            -convert-func-to-llvm
+            -reconcile-unrealized-casts |
+        ${LLVM_TOOLS_BINARY_DIR}/mlir-translate -mlir-to-llvmir |
+        ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
+        ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
+          -o ${CMAKE_CURRENT_BINARY_DIR}/forward194.o
+  DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/concat_forward.mlir
+  COMMENT "Building forward194.o "
+  VERBATIM)
+
+add_custom_command(
+    OUTPUT subgraph194.o
+    COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/concat_subgraph.mlir 
+              -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
+            ${BUDDY_BINARY_DIR}/buddy-opt
+            -convert-elementwise-to-linalg
+            -arith-expand
+            -eliminate-empty-tensors
+            -empty-tensor-to-alloc-tensor
+            -one-shot-bufferize
+            -func-bufferize-dynamic-offset
+            -tensor-bufferize
+            -arith-bufferize
+            -buffer-deallocation
+            -finalizing-bufferize
+            -matmul-parallel-vectorization-optimize
+            -batchmatmul-optimize
+            -convert-linalg-to-affine-loops
+            -affine-loop-fusion
+            -affine-parallelize
+            -lower-affine
+            -convert-scf-to-openmp
+            -convert-vector-to-scf
+            -expand-strided-metadata
+            -cse
+            -convert-vector-to-llvm
+            -memref-expand
+            -arith-expand
+            -convert-arith-to-llvm
+            -finalize-memref-to-llvm
+            -convert-scf-to-cf
+            -llvm-request-c-wrappers
+            -convert-openmp-to-llvm
+            -convert-arith-to-llvm
+            -convert-math-to-llvm
+            -convert-math-to-libm 
+            -convert-func-to-llvm
+            -reconcile-unrealized-casts |
+          ${LLVM_TOOLS_BINARY_DIR}/mlir-translate -mlir-to-llvmir |
+          ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
+          ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
+            -o ${CMAKE_CURRENT_BINARY_DIR}/subgraph194.o
+    DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/concat_subgraph.mlir
+    COMMENT "Building subgraph194.o "
+    VERBATIM)
+
+add_library(DISLLAMACON STATIC forward194.o subgraph194.o)
+
+add_custom_command(
+  OUTPUT forward195.o
+  COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_forward.mlir 
+            -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
+          ${BUDDY_BINARY_DIR}/buddy-opt
+            -arith-expand
+            -eliminate-empty-tensors
+            -empty-tensor-to-alloc-tensor
+            -one-shot-bufferize
+            -matmul-parallel-vectorization-optimize
+            -batchmatmul-optimize
+            -convert-linalg-to-affine-loops
+            -affine-loop-fusion
+            -affine-parallelize
+            -lower-affine
+            -convert-scf-to-openmp
+            -func-bufferize
+            -arith-bufferize
+            -tensor-bufferize
+            -buffer-deallocation
+            -finalizing-bufferize
+            -convert-vector-to-scf
+            -expand-strided-metadata
+            -convert-vector-to-llvm
+            -memref-expand
+            -arith-expand
+            -convert-arith-to-llvm
+            -finalize-memref-to-llvm
+            -convert-scf-to-cf
+            -llvm-request-c-wrappers
+            -convert-openmp-to-llvm
+            -convert-arith-to-llvm
+            -convert-math-to-llvm
+            -convert-math-to-libm 
+            -convert-func-to-llvm
+            -reconcile-unrealized-casts |
+        ${LLVM_TOOLS_BINARY_DIR}/mlir-translate -mlir-to-llvmir |
+        ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
+        ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
+          -o ${CMAKE_CURRENT_BINARY_DIR}/forward195.o
+  DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_forward.mlir
+  COMMENT "Building forward195.o "
+  VERBATIM)
+
+add_custom_command(
+    OUTPUT subgraph195.o
+    COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_subgraph.mlir 
+              -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
+            ${BUDDY_BINARY_DIR}/buddy-opt
+            -eliminate-empty-tensors
+            -empty-tensor-to-alloc-tensor
+            -one-shot-bufferize
+            -convert-tensor-to-linalg
+            -func-bufferize
+            -arith-bufferize
+            -matmul-parallel-vectorization-optimize
+            -batchmatmul-optimize
+            -convert-linalg-to-affine-loops
+            -lower-affine
+            -func-bufferize
+            -arith-bufferize
+            -tensor-bufferize
+            -buffer-deallocation
+            -finalizing-bufferize
+            -convert-vector-to-scf
+            -expand-strided-metadata
+            -convert-vector-to-llvm
+            -convert-arith-to-llvm
+            -finalize-memref-to-llvm
+            -convert-scf-to-cf
+            -llvm-request-c-wrappers
+            -convert-arith-to-llvm
+            -convert-func-to-llvm
+            -reconcile-unrealized-casts |
+          ${LLVM_TOOLS_BINARY_DIR}/mlir-translate -mlir-to-llvmir |
+          ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
+          ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
+            -o ${CMAKE_CURRENT_BINARY_DIR}/subgraph195.o
+    DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_subgraph.mlir
+    COMMENT "Building subgraph195.o "
+    VERBATIM)
+
+add_library(DISLLAMASP STATIC forward195.o subgraph195.o)
+
 SET_SOURCE_FILES_PROPERTIES(
   template.o
   PROPERTIES
@@ -581,6 +757,8 @@ SET_TARGET_PROPERTIES(
   DISLLAMA3
   DISLLAMA4
   DISLLAMA5
+  DISLLAMACON
+  DISLLAMASP
   PROPERTIES
   LINKER_LANGUAGE C)
 
@@ -609,6 +787,8 @@ set(BUDDY_DIS_LLAMA_LIBS
   DISLLAMA3
   DISLLAMA4
   DISLLAMA5
+  DISLLAMACON
+  DISLLAMASP
   mlir_c_runner_utils
   omp
 )
