@@ -64,6 +64,28 @@ extern "C" void _mlir_ciface_forward5(MemRef<float, 2> *, MemRef<float, 1> *,
 extern "C" void _mlir_ciface_forward193(MemRef<float, 3> *, MemRef<float, 1> *,
                                         MemRef<float, 3> *);
 
+static void printDebugLogFile(const std::vector<float> &vec,
+                              const std::string &filename) {
+  std::string logDir = std::string(LLAMA_DIS_EXAMPLE_PATH) + "/" + filename;
+  std::ofstream file(logDir, std::ios::app);
+  if (!file.is_open()) {
+    std::cerr << "无法打开文件: " << logDir << std::endl;
+    return;
+  }
+
+  file << "[DEBUG]: " << std::endl;
+  // 设置输出格式（固定小数点，保留6位小数）
+  file << "[";
+  file << std::fixed << std::setprecision(6);
+  for (size_t i = 0; i < vec.size(); ++i) {
+    file << vec[i];
+    if (i < vec.size() - 1)
+      file << " ";
+  }
+  file << "]" << '\n';
+  file.close();
+}
+
 /// Capture input message.
 void getUserInput(std::string &inputStr) {
   std::cout << "\nPlease send a message:" << std::endl;
@@ -243,7 +265,7 @@ int main() {
   //  - Find and append the generated token.
   //  - Continue iterating until the terminal condition is met.
   int generateLen = MaxTokenLength - inputContainer.getTokenCnt();
-  for (int i = 0; i < generateLen; i++) {
+  for (int i = 0; i < 1; i++) {
     const auto inferenceStart = std::chrono::high_resolution_clock::now();
     // Execute the forward pass of the model.
 
@@ -256,7 +278,8 @@ int main() {
     resultContainer0.splitMemRef(std::move(resultContainer0),
                                  subResultContainer0, subResultContainer1, 1,
                                  20);
-    for (int m = 0; m < 32; m++) {
+    
+    for (int m = 0; m < 2; m++) {
       _mlir_ciface_forward1(&sub3DContainer0, &paramsContainers[m * 6],
                             &subResultContainer0);
       _mlir_ciface_forward1(&sub3DContainer1, &paramsContainers[m * 6],
@@ -294,6 +317,7 @@ int main() {
       _mlir_ciface_forward3(&subResultContainer1, &sub2DContainer1,
                             &subResultContainer1);
     }
+    
     tmp3DContainer.concatenateMemRefs(subResultContainer0, subResultContainer1,
                                       tmp3DContainer, 1);
     _mlir_ciface_forward193(&resultContainer0, &paramsContainer2,

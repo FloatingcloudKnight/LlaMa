@@ -24,10 +24,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <thread>
-#include <shared_mutex>
-#include <mutex>
 #include <variant>
 #include <vector>
 
@@ -40,13 +40,20 @@ constexpr size_t HiddenSize = 4096;
 constexpr size_t HiddenSize0 = 128;
 constexpr size_t HiddenSize1 = 41;
 
-std::vector<MemRef<float, 1>> paramsContainers;
 MemRef<float, 2> myMemRef1({MaxTokenLength, HiddenSize1});
 MemRef<float, 3> myMemRef2({1, MaxTokenLength, HiddenSize0});
 MemRef<float, 3> myMemRef3({1, MaxTokenLength, HiddenSize0});
-MemRef<float, 3> concatResultContainer({1, MaxTokenLength, HiddenSize});
 
-std::shared_mutex shared_mtx;
+std::mutex mutex0;
+std::mutex mutex1;
+std::mutex mutex2;
+std::mutex mutex3;
+std::condition_variable cv0;
+std::condition_variable cv1;
+std::condition_variable cv2;
+std::condition_variable cv3;
+bool ready0 = false, ready1 = false, ready2 = false, ready3 = false;
+bool done0 = false, done1 = false, done2 = false, done3 = false;
 
 struct MemRefContainer {
   MemRef<float, 3> memRef3D0;
@@ -57,28 +64,6 @@ struct MemRefContainer {
   MemRefContainer(MemRef<float, 3> m1, MemRef<float, 2> m2, MemRef<float, 3> m3,
                   MemRef<float, 3> m4)
       : memRef3D0(m1), memRef2D(m2), memRef3D1(m3), memRef3D2(m4) {}
-};
-
-// // 推理线程的输入结构
-// struct InferenceInput {
-//   MemRef<float, 3> inputMemRef;
-//   MemRef<float, 2> mhaContainer0;
-//   MemRef<float, 3> mhaContainer1;
-//   MemRef<float, 3> mhaContainer2;
-
-//   InferenceInput(MemRef<float, 3> inputtMemRef, MemRef<float, 2> mha0,
-//                  MemRef<float, 3> mha1, MemRef<float, 3> mha2)
-//       : inputMemRef(inputtMemRef), mhaContainer0(mha0), mhaContainer1(mha1),
-//         mhaContainer2(mha2) {}
-// };
-
-class ConcatQueue : public SharedQueueTemp {
-public:
-  ConcatQueue() : SharedQueueTemp({"input0", "output0", "input1", "output1"}) {}
-};
-class InOutQueue : public SharedQueueTemp {
-public:
-  InOutQueue() : SharedQueueTemp({"input", "output"}) {}
 };
 
 /// Declare LLaMa forward function.
@@ -96,9 +81,14 @@ extern "C" void _mlir_ciface_forward5(MemRef<float, 2> *, MemRef<float, 1> *,
 extern "C" void _mlir_ciface_forward193(MemRef<float, 3> *, MemRef<float, 1> *,
                                         MemRef<float, 3> *);
 extern "C" void _mlir_ciface_forward194(MemRef<float, 3> *, MemRef<float, 3> *,
+                                        MemRef<float, 3> *, MemRef<float, 3> *,
                                         MemRef<float, 3> *);
 extern "C" void _mlir_ciface_forward195(MemRef<float, 2> *, MemRef<float, 2> *,
+                                        MemRef<float, 2> *, MemRef<float, 2> *,
                                         MemRef<float, 2> *);
+extern "C" void _mlir_ciface_forward196(MemRef<float, 3> *, MemRef<float, 3> *,
+                                        MemRef<float, 3> *, MemRef<float, 3> *,
+                                        MemRef<float, 3> *);
 
 static void printDebugLogFile(const std::vector<float> &vec,
                               const std::string &filename) {
@@ -190,131 +180,6 @@ int findMaxIndex(const float *start, const float *end) {
   return std::distance(start, std::max_element(start, end));
 }
 
-void mainInferenceTokenThread(InOutQueue &inputQueue, ConcatQueue &concatQueue,
-                              ConcatQueue &splitQueue,
-                              const std::string inputName,
-                              const std::string outputName,
-                              const int threadNum) {
-  MemRef<float, 3> subResultContainer({1, SubMaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultContainer0({1, SubMaxTokenLength, HiddenSize});
-  MemRef<float, 3> resultContainer({1, MaxTokenLength, HiddenSize});
-  MemRef<float, 2> resultContainer2D({MaxTokenLength, HiddenSize});
-  MemRef<float, 2> subResultContainer2D({SubMaxTokenLength, HiddenSize});
-  MemRef<float, 2> subResultContainer2D0({SubMaxTokenLength, HiddenSize});
-  MemRef<float, 3> input({1, SubMaxTokenLength, HiddenSize});
-  while (true) {
-    input = inputQueue.pop<MemRef<float, 3>>("input");
-
-    // Execute the forward pass of the model.
-    for (int m = 0; m < 32; m++) {
-      _mlir_ciface_forward1(&subResultContainer, &paramsContainers[m * 6],
-                            &input);
-      concatQueue.push(inputName, std::move(subResultContainer));
-      shared_mtx.lock_shared();
-      _mlir_ciface_forward2(&resultContainer2D, &paramsContainers[m * 6 + 1 + threadNum],
-                            &concatResultContainer, &myMemRef2, &myMemRef3,
-                            &myMemRef1);
-      shared_mtx.unlock_shared();
-      splitQueue.push(inputName, std::move(resultContainer2D));
-      subResultContainer2D = splitQueue.pop<MemRef<float, 2>>(outputName);
-      _mlir_ciface_forward3(&input, &subResultContainer2D, &input);
-      _mlir_ciface_forward1(&subResultContainer, &paramsContainers[m * 6 + 3],
-                            &input);
-      concatQueue.push(inputName, std::move(subResultContainer));
-      shared_mtx.lock_shared();
-      _mlir_ciface_forward5(&resultContainer2D, &paramsContainers[m * 6 + 4 + threadNum],
-                            &concatResultContainer);
-      shared_mtx.unlock_shared();
-      splitQueue.push(inputName, std::move(resultContainer2D));
-      subResultContainer2D = splitQueue.pop<MemRef<float, 2>>(outputName);
-      _mlir_ciface_forward3(&input, &subResultContainer2D, &input);
-    }
-    inputQueue.push("output", std::move(input));
-  }
-}
-
-// void subInferenceTokenThread(InOutQueue &inputQueue,
-//                              ConcatQueue &concatQueue0) {
-//   MemRef<float, 3> subResultContainer({1, SubMaxTokenLength, HiddenSize});
-//   MemRef<float, 3> subResultContainer0({1, SubMaxTokenLength, HiddenSize});
-//   MemRef<float, 3> resultContainer({1, MaxTokenLength, HiddenSize});
-//   MemRef<float, 2> resultContainer2D({MaxTokenLength, HiddenSize});
-//   MemRef<float, 2> subResultContainer2D({SubMaxTokenLength, HiddenSize});
-//   MemRef<float, 2> subResultContainer2D0({SubMaxTokenLength, HiddenSize});
-//   while (true) {
-//     subResultContainer = inputQueue.pop<MemRef<float, 3>>("input");
-//     MemRef<float, 3> input(std::move(subResultContainer));
-
-//     // Execute the forward pass of the model.
-//     for (int m = 0; m < 32; m++) {
-//       _mlir_ciface_forward1(&subResultContainer, &paramsContainers[m * 6],
-//                             &input);
-//       concatQueue0.push("thread1", subResultContainer);
-//       subResultContainer0 = concatQueue0.pop<MemRef<float, 3>>("thread0");
-//       resultContainer.concatenateMemRefs(subResultContainer0,
-//                                          subResultContainer, 1);
-//       _mlir_ciface_forward2(&resultContainer2D, &paramsContainers[m * 6 + 2],
-//                             &resultContainer, &myMemRef2, &myMemRef3,
-//                             &myMemRef1);
-//       subResultContainer2D0.splitMemRef(std::move(resultContainer2D),
-//                                     subResultContainer2D,
-//                                     subResultContainer2D0, 0, 20);
-//       concatQueue0.push("thread1", subResultContainer2D);
-//       subResultContainer2D = concatQueue0.pop<MemRef<float, 2>>("thread0");
-//       subResultContainer2D0.addMemRef(subResultContainer2D0,
-//                                       subResultContainer2D);
-//       _mlir_ciface_forward3(&input, &subResultContainer2D0, &input);
-//       _mlir_ciface_forward1(&subResultContainer, &paramsContainers[m * 6 +
-//       3],
-//                             &input);
-//       concatQueue0.push("thread1", subResultContainer);
-//       subResultContainer0 = concatQueue0.pop<MemRef<float, 3>>("thread0");
-//       resultContainer.concatenateMemRefs(subResultContainer0,
-//                                          subResultContainer, 1);
-//       _mlir_ciface_forward5(&resultContainer2D, &paramsContainers[m * 6 + 5],
-//                             &resultContainer);
-//       subResultContainer2D0.splitMemRef(std::move(resultContainer2D),
-//                                     subResultContainer2D,
-//                                     subResultContainer2D0, 0, 20);
-//       concatQueue0.push("thread1", subResultContainer2D);
-//       subResultContainer2D = concatQueue0.pop<MemRef<float, 2>>("thread0");
-//       subResultContainer2D0.addMemRef(subResultContainer2D0,
-//                                       subResultContainer2D);
-//       _mlir_ciface_forward3(&input, &subResultContainer2D0, &input);
-//     }
-//     inputQueue.push("output", input);
-//   }
-// }
-
-void concatThreadTask(ConcatQueue &concatQueue) {
-  MemRef<float, 3> subResultContainer({1, SubMaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultContainer0({1, SubMaxTokenLength, HiddenSize});
-  while (true) {
-    shared_mtx.lock();
-    subResultContainer = concatQueue.pop<MemRef<float, 3>>("input0");
-    subResultContainer0 = concatQueue.pop<MemRef<float, 3>>("input1");
-    _mlir_ciface_forward194(&concatResultContainer, &subResultContainer,
-                                        &subResultContainer0);
-    shared_mtx.unlock();
-  }
-}
-
-void splitThreadTask(ConcatQueue &splitQueue) {
-  MemRef<float, 2> subResultContainer[2] = {
-      MemRef<float, 2>({SubMaxTokenLength, HiddenSize}, false, 0),
-      MemRef<float, 2>({SubMaxTokenLength, HiddenSize}, false, 0)};
-  MemRef<float, 2> resultContainer0({MaxTokenLength, HiddenSize});
-  MemRef<float, 2> resultContainer1({MaxTokenLength, HiddenSize});
-  while (true) {
-    resultContainer0 = splitQueue.pop<MemRef<float, 2>>("input0");
-    resultContainer1 = splitQueue.pop<MemRef<float, 2>>("input1");
-    _mlir_ciface_forward195(subResultContainer, &resultContainer0,
-                                        &resultContainer1);
-    splitQueue.push("output0", std::move(subResultContainer[0]));
-    splitQueue.push("output1", std::move(subResultContainer[1]));
-  }
-}
-
 // -----------------------------------------------------------------------------
 // LLaMA Inference Main Entry
 // -----------------------------------------------------------------------------
@@ -325,37 +190,37 @@ int main() {
   std::cout << "\033[33;1m" << title << "\033[0m" << std::endl;
 
   int split_group[] = {
-      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
-      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1,
-      2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2,
-      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
-      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1,
-      2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2,
-      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
-      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1};
+      1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1,
+      1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1,
+      4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4,
+      1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1,
+      1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1,
+      4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4,
+      1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1,
+      1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1, 4, 1, 1};
   constexpr size_t param_size_group[] = {
-      131072064, 4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 131076096};
+      131072064, 4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 4096,     16777216, 0, 4096, 33816576,
+      0,         4096, 16777216, 0, 4096,     33816576, 0, 4096, 16777216,
+      0,         4096, 33816576, 0, 131076096};
   /// Define directories of vacabulary and parameter file.
   std::string llamaDir = LLAMA_DIS_EXAMPLE_PATH;
   std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
@@ -384,14 +249,24 @@ int main() {
   MemRef<float, 2> memRef2D({MaxTokenLength, HiddenSize1});
   MemRef<float, 3> memRef3D1({1, MaxTokenLength, HiddenSize0});
   MemRef<float, 3> memRef3D2({1, MaxTokenLength, HiddenSize0});
-  //   MemRef<float, 3> resultContainer[2] = {
-  //       MemRef<float, 3>({1, MaxTokenLength, HiddenSize}, false, 0),
-  //       MemRef<float, 3>({1, MaxTokenLength, MaxVocabSize}, false, 0)};
   MemRefContainer resultContainer(memRef3D0, memRef2D, memRef3D1, memRef3D2);
   MemRefContainer *resultContainerPtr = &resultContainer;
   MemRef<float, 3> resultMemRef({1, MaxTokenLength, HiddenSize});
   MemRef<float, 3> subResultMemRef0({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 3> sub3DMemRef0({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 2> resultMemRef2D0({MaxTokenLength, HiddenSize});
   MemRef<float, 3> subResultMemRef1({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 3> sub3DMemRef1({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 2> resultMemRef2D1({MaxTokenLength, HiddenSize});
+  MemRef<float, 3> subResultMemRef2({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 3> sub3DMemRef2({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 2> resultMemRef2D2({MaxTokenLength, HiddenSize});
+  MemRef<float, 3> subResultMemRef3({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 3> sub3DMemRef3({1, SubMaxTokenLength, HiddenSize});
+  MemRef<float, 2> resultMemRef2D3({MaxTokenLength, HiddenSize});
+  MemRef<float, 2> subResultContainer2D[2] = {
+      MemRef<float, 2>({SubMaxTokenLength, HiddenSize}, false, 0),
+      MemRef<float, 2>({SubMaxTokenLength, HiddenSize}, false, 0)};
   Text<size_t, 2> inputContainer(inputStr);
 
   /// Fill data into containers
@@ -403,6 +278,7 @@ int main() {
 
   MemRef<float, 1> paramsContainer0({param_size_group[0]});
   loadParameters(paramsDirs[0], paramsContainer0);
+  std::vector<MemRef<float, 1>> paramsContainers;
   int params_count = 1;
   for (int i = 1; i < 193; i++) {
     for (int j = 0; j < split_group[i]; j++) {
@@ -417,55 +293,549 @@ int main() {
   MemRef<float, 1> paramsContainer2({param_size_group[193]});
   loadParameters(paramsDirs[params_count], paramsContainer2);
 
-  InOutQueue inputQueue0;
-  InOutQueue inputQueue1;
-  ConcatQueue concatQueue;
-  ConcatQueue splitQueue;
-  std::thread inferenceThread0(mainInferenceTokenThread, std::ref(inputQueue0),
-                               std::ref(concatQueue), std::ref(splitQueue),
-                               "input0", "output0", 0);
-  std::thread inferenceThread1(mainInferenceTokenThread, std::ref(inputQueue1),
-                               std::ref(concatQueue), std::ref(splitQueue),
-                               "input1", "output1", 1);
-  std::thread concatThread(concatThreadTask, std::ref(concatQueue));
-  std::thread splitThread(splitThreadTask, std::ref(splitQueue));
   // std::thread inferenceThread1(subInferenceTokenThread,
   // std::ref(inputQueue1),
   //                              std::ref(concatQueue0));
 
-  /// Run LLaMA Inference
-  //  - Perform the forward function.
-  //  - Find and append the generated token.
-  //  - Continue iterating until the terminal condition is met.
+  std::thread t0([&]() {
+    while (true) {
+      {
+        std::unique_lock<std::mutex> lock(mutex0);
+        cv0.wait(lock, [] { return ready0; });
+      }
+      for (int m0 = 0; m0 < 32; m0++) {
+        _mlir_ciface_forward1(&sub3DMemRef0, &paramsContainers[m0 * 6],
+                              &subResultMemRef0);
+        {
+          std::lock_guard<std::mutex> lock(mutex0);
+          ready0 = false;
+          done0 = true;
+        }
+        cv0.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex0);
+          cv0.wait(lock, [] { return ready0; });
+        }
+        _mlir_ciface_forward2(&resultMemRef2D0, &paramsContainers[m0 * 6 + 1],
+                              &resultMemRef, &myMemRef2, &myMemRef3,
+                              &myMemRef1);
+        {
+          std::lock_guard<std::mutex> lock(mutex0);
+          ready0 = false;
+          done0 = true;
+        }
+        cv0.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex0);
+          cv0.wait(lock, [] { return ready0; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef0, &subResultContainer2D[0],
+                              &subResultMemRef0);
+        _mlir_ciface_forward1(&sub3DMemRef0, &paramsContainers[m0 * 6 + 3],
+                              &subResultMemRef0);
+        {
+          std::lock_guard<std::mutex> lock(mutex0);
+          ready0 = false;
+          done0 = true;
+        }
+        cv0.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex0);
+          cv0.wait(lock, [] { return ready0; });
+        }
+        _mlir_ciface_forward5(&resultMemRef2D0, &paramsContainers[m0 * 6 + 4],
+                              &resultMemRef);
+        {
+          std::lock_guard<std::mutex> lock(mutex0);
+          ready0 = false;
+          done0 = true;
+        }
+        cv0.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex0);
+          cv0.wait(lock, [] { return ready0; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef0, &subResultContainer2D[0],
+                              &subResultMemRef0);
+      }
+      {
+        std::lock_guard<std::mutex> lock(mutex0);
+        ready0 = false;
+        done0 = true;
+      }
+      cv0.notify_one();
+    }
+  });
+
+  // 线程1：处理 subResultMemRef1
+  std::thread t1([&]() {
+    while (true) {
+      {
+        std::unique_lock<std::mutex> lock(mutex1);
+        cv1.wait(lock, [] { return ready1; });
+      }
+      for (int m1 = 0; m1 < 32; m1++) {
+        _mlir_ciface_forward1(&sub3DMemRef1, &paramsContainers[m1 * 6],
+                              &subResultMemRef1);
+        {
+          std::lock_guard<std::mutex> lock(mutex1);
+          ready1 = false;
+          done1 = true;
+        }
+        cv1.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex1);
+          cv1.wait(lock, [] { return ready1; });
+        }
+
+        _mlir_ciface_forward2(&resultMemRef2D1, &paramsContainers[m1 * 6 + 2],
+                              &resultMemRef, &myMemRef2, &myMemRef3,
+                              &myMemRef1);
+        {
+          std::lock_guard<std::mutex> lock(mutex1);
+          ready1 = false;
+          done1 = true;
+        }
+        cv1.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex1);
+          cv1.wait(lock, [] { return ready1; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef1, &subResultContainer2D[1],
+                              &subResultMemRef1);
+        _mlir_ciface_forward1(&sub3DMemRef1, &paramsContainers[m1 * 6 + 3],
+                              &subResultMemRef1);
+        {
+          std::lock_guard<std::mutex> lock(mutex1);
+          ready1 = false;
+          done1 = true;
+        }
+        cv1.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex1);
+          cv1.wait(lock, [] { return ready1; });
+        }
+        _mlir_ciface_forward5(&resultMemRef2D1, &paramsContainers[m1 * 6 + 5],
+                              &resultMemRef);
+        {
+          std::lock_guard<std::mutex> lock(mutex1);
+          ready1 = false;
+          done1 = true;
+        }
+        cv1.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex1);
+          cv1.wait(lock, [] { return ready1; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef1, &subResultContainer2D[1],
+                              &subResultMemRef1);
+      }
+      {
+        std::lock_guard<std::mutex> lock(mutex1);
+        ready1 = false;
+        done1 = true;
+      }
+      cv1.notify_one();
+    }
+  });
+
+  // 线程2：处理 subResultMemRef2
+  std::thread t2([&]() {
+    while (true) {
+      {
+        std::unique_lock<std::mutex> lock(mutex2);
+        cv2.wait(lock, [] { return ready2; });
+      }
+      for (int m = 0; m < 32; m++) {
+        _mlir_ciface_forward1(&sub3DMemRef2, &paramsContainers[m * 6],
+                              &subResultMemRef2);
+        {
+          std::lock_guard<std::mutex> lock(mutex2);
+          ready2 = false;
+          done2 = true;
+        }
+        cv2.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex2);
+          cv2.wait(lock, [] { return ready2; });
+        }
+
+        _mlir_ciface_forward2(&resultMemRef2D2, &paramsContainers[m * 6 + 2],
+                              &resultMemRef, &myMemRef2, &myMemRef3,
+                              &myMemRef1);
+        {
+          std::lock_guard<std::mutex> lock(mutex2);
+          ready2 = false;
+          done2 = true;
+        }
+        cv2.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex2);
+          cv2.wait(lock, [] { return ready2; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef2, &subResultContainer2D[2],
+                              &subResultMemRef2);
+        _mlir_ciface_forward1(&sub3DMemRef2, &paramsContainers[m * 6 + 3],
+                              &subResultMemRef2);
+        {
+          std::lock_guard<std::mutex> lock(mutex2);
+          ready2 = false;
+          done2 = true;
+        }
+        cv2.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex2);
+          cv2.wait(lock, [] { return ready2; });
+        }
+        _mlir_ciface_forward5(&resultMemRef2D2, &paramsContainers[m * 6 + 5],
+                              &resultMemRef);
+        {
+          std::lock_guard<std::mutex> lock(mutex2);
+          ready2 = false;
+          done2 = true;
+        }
+        cv2.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex2);
+          cv2.wait(lock, [] { return ready2; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef2, &subResultContainer2D[2],
+                              &subResultMemRef2);
+      }
+      {
+        std::lock_guard<std::mutex> lock(mutex2);
+        ready2 = false;
+        done2 = true;
+      }
+      cv2.notify_one();
+    }
+  });
+  // 线程3：处理 subResultMemRef3
+  std::thread t3([&]() {
+    while (true) {
+      {
+        std::unique_lock<std::mutex> lock(mutex3);
+        cv3.wait(lock, [] { return ready3; });
+      }
+      for (int m = 0; m < 32; m++) {
+        _mlir_ciface_forward1(&sub3DMemRef3, &paramsContainers[m * 6],
+                              &subResultMemRef3);
+        {
+          std::lock_guard<std::mutex> lock(mutex3);
+          ready3 = false;
+          done3 = true;
+        }
+        cv3.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex3);
+          cv3.wait(lock, [] { return ready3; });
+        }
+
+        _mlir_ciface_forward2(&resultMemRef2D3, &paramsContainers[m * 6 + 2],
+                              &resultMemRef, &myMemRef2, &myMemRef3,
+                              &myMemRef1);
+        {
+          std::lock_guard<std::mutex> lock(mutex3);
+          ready3 = false;
+          done3 = true;
+        }
+        cv3.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex3);
+          cv3.wait(lock, [] { return ready3; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef3, &subResultContainer2D[3],
+                              &subResultMemRef3);
+        _mlir_ciface_forward1(&sub3DMemRef3, &paramsContainers[m * 6 + 3],
+                              &subResultMemRef3);
+        {
+          std::lock_guard<std::mutex> lock(mutex3);
+          ready3 = false;
+          done3 = true;
+        }
+        cv3.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex3);
+          cv3.wait(lock, [] { return ready3; });
+        }
+        _mlir_ciface_forward5(&resultMemRef2D3, &paramsContainers[m * 6 + 5],
+                              &resultMemRef);
+        {
+          std::lock_guard<std::mutex> lock(mutex3);
+          ready3 = false;
+          done3 = true;
+        }
+        cv3.notify_one();
+        {
+          std::unique_lock<std::mutex> lock(mutex3);
+          cv3.wait(lock, [] { return ready3; });
+        }
+        _mlir_ciface_forward3(&subResultMemRef3, &subResultContainer2D[3],
+                              &subResultMemRef3);
+      }
+      {
+        std::lock_guard<std::mutex> lock(mutex3);
+        ready3 = false;
+        done3 = true;
+      }
+      cv3.notify_one();
+    }
+  });
   /// Run LLaMA Inference
   //  - Perform the forward function.
   //  - Find and append the generated token.
   //  - Continue iterating until the terminal condition is met.
   int generateLen = MaxTokenLength - inputContainer.getTokenCnt();
-  for (int i = 0; i < generateLen; i++) {
+  for (int i = 0; i < 5; i++) {
     const auto inferenceStart = std::chrono::high_resolution_clock::now();
 
     // Execute the forward pass of the model.
     _mlir_ciface_forward0(resultContainerPtr, &paramsContainer0,
                           &inputContainer);
-    if (i == 0){
+    if (i == 0) {
       myMemRef1 = resultContainerPtr->memRef2D;
       myMemRef2 = resultContainerPtr->memRef3D1;
       myMemRef3 = resultContainerPtr->memRef3D2;
     }
-    
+
     resultContainerPtr->memRef3D0.splitMemRef(
         std::move(resultContainerPtr->memRef3D0), subResultMemRef0,
         subResultMemRef1, 1, 20);
-
-    inputQueue0.push("input", std::move(subResultMemRef0));
-    inputQueue1.push("input", std::move(subResultMemRef1));
-
-    subResultMemRef0 = inputQueue0.pop<MemRef<float, 3>>("output");
-    subResultMemRef1 = inputQueue1.pop<MemRef<float, 3>>("output");
-
-    resultMemRef.concatenateMemRefs(subResultMemRef0, subResultMemRef1,
-                                    resultMemRef, 1);
+    _mlir_ciface_forward196(&subResultMemRef0, &subResultMemRef1, 
+                            &subResultMemRef2, &subResultMemRef3,
+                            subResultContainer2D);
+    {
+      std::lock_guard<std::mutex> lock(mutex0);
+      ready0 = true;
+    }
+    cv0.notify_one();
+    {
+      std::lock_guard<std::mutex> lock(mutex1);
+      ready1 = true;
+    }
+    cv1.notify_one();
+    {
+      std::lock_guard<std::mutex> lock(mutex2);
+      ready2 = true;
+    }
+    cv2.notify_one();
+    {
+      std::lock_guard<std::mutex> lock(mutex3);
+      ready3 = true;
+    }
+    cv3.notify_one();
+    for (int m = 0; m < 32; m++) {
+      // after forward1
+      {
+        std::unique_lock<std::mutex> lock(mutex0);
+        cv0.wait(lock, [] { return done0; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex1);
+        cv1.wait(lock, [] { return done1; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex2);
+        cv2.wait(lock, [] { return done2; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex3);
+        cv3.wait(lock, [] { return done3; });
+      }
+      _mlir_ciface_forward194(&resultMemRef, &sub3DMemRef0, &sub3DMemRef1, &sub3DMemRef2, &sub3DMemRef3);
+      {
+        std::lock_guard<std::mutex> lock(mutex0);
+        done0 = false;
+        ready0 = true;
+      }
+      cv0.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex1);
+        done1 = false;
+        ready1 = true;
+      }
+      cv1.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex2);
+        done2 = false;
+        ready2 = true;
+      }
+      cv2.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex3);
+        done3 = false;
+        ready3 = true;
+      }
+      cv3.notify_one();
+      // after forward2
+      {
+        std::unique_lock<std::mutex> lock(mutex0);
+        cv0.wait(lock, [] { return done0; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex1);
+        cv1.wait(lock, [] { return done1; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex2);
+        cv2.wait(lock, [] { return done2; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex3);
+        cv3.wait(lock, [] { return done3; });
+      }
+      _mlir_ciface_forward195(subResultContainer2D, &resultMemRef2D0,
+                              &resultMemRef2D1);
+      {
+        std::lock_guard<std::mutex> lock(mutex0);
+        done0 = false;
+        ready0 = true;
+      }
+      cv0.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex1);
+        done1 = false;
+        ready1 = true;
+      }
+      cv1.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex2);
+        done2 = false;
+        ready2 = true;
+      }
+      cv2.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex3);
+        done3 = false;
+        ready3 = true;
+      }
+      cv3.notify_one();
+      // after forward2
+      {
+        std::unique_lock<std::mutex> lock(mutex0);
+        cv0.wait(lock, [] { return done0; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex1);
+        cv1.wait(lock, [] { return done1; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex2);
+        cv2.wait(lock, [] { return done2; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex3);
+        cv3.wait(lock, [] { return done3; });
+      }
+      _mlir_ciface_forward194(&resultMemRef, &sub3DMemRef0, &sub3DMemRef1);
+      {
+        std::lock_guard<std::mutex> lock(mutex0);
+        done0 = false;
+        ready0 = true;
+      }
+      cv0.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex1);
+        done1 = false;
+        ready1 = true;
+      }
+      cv1.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex2);
+        done2 = false;
+        ready2 = true;
+      }
+      cv2.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex3);
+        done3 = false;
+        ready3 = true;
+      }
+      cv3.notify_one();
+      // after forward2
+      {
+        std::unique_lock<std::mutex> lock(mutex0);
+        cv0.wait(lock, [] { return done0; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex1);
+        cv1.wait(lock, [] { return done1; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex2);
+        cv2.wait(lock, [] { return done2; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex3);
+        cv3.wait(lock, [] { return done3; });
+      }
+      _mlir_ciface_forward195(subResultContainer2D, &resultMemRef2D0,
+                              &resultMemRef2D1);
+      {
+        std::lock_guard<std::mutex> lock(mutex0);
+        done0 = false;
+        ready0 = true;
+      }
+      cv0.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex1);
+        done1 = false;
+        ready1 = true;
+      }
+      cv1.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex2);
+        done2 = false;
+        ready2 = true;
+      }
+      cv2.notify_one();
+      {
+        std::lock_guard<std::mutex> lock(mutex3);
+        done3 = false;
+        ready3 = true;
+      }
+      cv3.notify_one();
+      // after forward2
+      {
+        std::unique_lock<std::mutex> lock(mutex0);
+        cv0.wait(lock, [] { return done0; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex1);
+        cv1.wait(lock, [] { return done1; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex2);
+        cv2.wait(lock, [] { return done2; });
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex3);
+        cv3.wait(lock, [] { return done3; });
+      }
+    }
+    // Wait for the threads to finish processing.
+    {
+      std::unique_lock<std::mutex> lock(mutex0);
+      cv0.wait(lock, [] { return done0; });
+      done0 = false;
+    }
+    {
+      std::unique_lock<std::mutex> lock(mutex1);
+      cv1.wait(lock, [] { return done1; });
+      done1 = false;
+    }
+    {
+      std::unique_lock<std::mutex> lock(mutex2);
+      cv2.wait(lock, [] { return done2; });
+      done2 = false;
+    }
+    {
+      std::unique_lock<std::mutex> lock(mutex3);
+      cv3.wait(lock, [] { return done3; });
+      done3 = false;
+    }
+    _mlir_ciface_forward194(&resultMemRef, &subResultMemRef0,
+                            &subResultMemRef1);
     _mlir_ciface_forward193(&resultMemRef, &paramsContainer2, &resultMemRef);
     const auto inferenceEnd = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::milli> inferenceTime =
@@ -489,11 +859,9 @@ int main() {
     inputContainer.appendTokenIdx(maxIndex);
     outputContainer.appendTokenIdx(maxIndex);
   }
-
-  inferenceThread0.join();
-  inferenceThread1.join();
-  concatThread.join();
-  splitThread.join();
+  t0.detach();
+  t1.detach();
+  t2.detach();
 
   /// Print the final result
   std::cout << "\n\033[33;1m[Input]\033[0m " << inputStr << std::endl;

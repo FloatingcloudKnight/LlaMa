@@ -65,8 +65,6 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize

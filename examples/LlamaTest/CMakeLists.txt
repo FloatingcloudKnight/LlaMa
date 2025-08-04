@@ -25,8 +25,6 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -74,9 +72,7 @@ add_custom_command(
             -tensor-bufferize
             -arith-bufferize
             -buffer-deallocation
-            -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
+            -finalizing-bufferize          
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -117,8 +113,6 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -167,8 +161,6 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -209,8 +201,6 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -259,8 +249,6 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -301,8 +289,6 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -351,8 +337,6 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -393,8 +377,6 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -443,8 +425,6 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -485,8 +465,6 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -535,8 +513,6 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -577,8 +553,6 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -627,8 +601,6 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -662,15 +634,13 @@ add_library(DISLLAMACON STATIC forward194.o subgraph194.o)
 
 add_custom_command(
   OUTPUT forward195.o
-  COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_forward.mlir 
+  COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/add_split_forward.mlir 
             -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
           ${BUDDY_BINARY_DIR}/buddy-opt
             -arith-expand
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
             -affine-parallelize
@@ -700,12 +670,94 @@ add_custom_command(
         ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
         ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
           -o ${CMAKE_CURRENT_BINARY_DIR}/forward195.o
-  DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_forward.mlir
+  DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/add_split_forward.mlir
   COMMENT "Building forward195.o "
   VERBATIM)
 
 add_custom_command(
     OUTPUT subgraph195.o
+    COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/add_split_subgraph.mlir 
+              -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
+            ${BUDDY_BINARY_DIR}/buddy-opt
+            -eliminate-empty-tensors
+            -empty-tensor-to-alloc-tensor
+            -one-shot-bufferize
+            -convert-tensor-to-linalg
+            -func-bufferize
+            -arith-bufferize
+            -convert-linalg-to-affine-loops
+            -lower-affine
+            -func-bufferize
+            -arith-bufferize
+            -tensor-bufferize
+            -buffer-deallocation
+            -finalizing-bufferize
+            -convert-scf-to-openmp
+            -convert-vector-to-scf
+            -expand-strided-metadata
+            -convert-vector-to-llvm
+            -convert-arith-to-llvm
+            -finalize-memref-to-llvm
+            -convert-scf-to-cf
+            -llvm-request-c-wrappers
+            -convert-openmp-to-llvm
+            -convert-arith-to-llvm
+            -convert-func-to-llvm
+            -reconcile-unrealized-casts |
+          ${LLVM_TOOLS_BINARY_DIR}/mlir-translate -mlir-to-llvmir |
+          ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
+          ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
+            -o ${CMAKE_CURRENT_BINARY_DIR}/subgraph195.o
+    DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/add_split_subgraph.mlir
+    COMMENT "Building subgraph195.o "
+    VERBATIM)
+
+add_library(DISLLAMAAS STATIC forward195.o subgraph195.o)
+
+add_custom_command(
+  OUTPUT forward196.o
+  COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_forward.mlir 
+            -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
+          ${BUDDY_BINARY_DIR}/buddy-opt
+            -arith-expand
+            -eliminate-empty-tensors
+            -empty-tensor-to-alloc-tensor
+            -one-shot-bufferize
+            -convert-linalg-to-affine-loops
+            -affine-loop-fusion
+            -affine-parallelize
+            -lower-affine
+            -convert-scf-to-openmp
+            -func-bufferize
+            -arith-bufferize
+            -tensor-bufferize
+            -buffer-deallocation
+            -finalizing-bufferize
+            -convert-vector-to-scf
+            -expand-strided-metadata
+            -convert-vector-to-llvm
+            -memref-expand
+            -arith-expand
+            -convert-arith-to-llvm
+            -finalize-memref-to-llvm
+            -convert-scf-to-cf
+            -llvm-request-c-wrappers
+            -convert-openmp-to-llvm
+            -convert-arith-to-llvm
+            -convert-math-to-llvm
+            -convert-math-to-libm 
+            -convert-func-to-llvm
+            -reconcile-unrealized-casts |
+        ${LLVM_TOOLS_BINARY_DIR}/mlir-translate -mlir-to-llvmir |
+        ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
+        ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
+          -o ${CMAKE_CURRENT_BINARY_DIR}/forward196.o
+  DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_forward.mlir
+  COMMENT "Building forward196.o "
+  VERBATIM)
+
+add_custom_command(
+    OUTPUT subgraph196.o
     COMMAND ${LLVM_TOOLS_BINARY_DIR}/mlir-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_subgraph.mlir 
               -pass-pipeline "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))" |
             ${BUDDY_BINARY_DIR}/buddy-opt
@@ -715,8 +767,6 @@ add_custom_command(
             -convert-tensor-to-linalg
             -func-bufferize
             -arith-bufferize
-            -matmul-parallel-vectorization-optimize
-            -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -lower-affine
             -func-bufferize
@@ -724,6 +774,7 @@ add_custom_command(
             -tensor-bufferize
             -buffer-deallocation
             -finalizing-bufferize
+            -convert-scf-to-openmp
             -convert-vector-to-scf
             -expand-strided-metadata
             -convert-vector-to-llvm
@@ -731,18 +782,19 @@ add_custom_command(
             -finalize-memref-to-llvm
             -convert-scf-to-cf
             -llvm-request-c-wrappers
+            -convert-openmp-to-llvm
             -convert-arith-to-llvm
             -convert-func-to-llvm
             -reconcile-unrealized-casts |
           ${LLVM_TOOLS_BINARY_DIR}/mlir-translate -mlir-to-llvmir |
           ${LLVM_TOOLS_BINARY_DIR}/llvm-as |
           ${LLVM_TOOLS_BINARY_DIR}/llc -filetype=obj -relocation-model=pic -O3
-            -o ${CMAKE_CURRENT_BINARY_DIR}/subgraph195.o
+            -o ${CMAKE_CURRENT_BINARY_DIR}/subgraph196.o
     DEPENDS buddy-opt ${CMAKE_CURRENT_SOURCE_DIR}/split_subgraph.mlir
-    COMMENT "Building subgraph195.o "
+    COMMENT "Building subgraph196.o "
     VERBATIM)
 
-add_library(DISLLAMASP STATIC forward195.o subgraph195.o)
+add_library(DISLLAMASP STATIC forward196.o subgraph196.o)
 
 SET_SOURCE_FILES_PROPERTIES(
   template.o
@@ -758,6 +810,7 @@ SET_TARGET_PROPERTIES(
   DISLLAMA4
   DISLLAMA5
   DISLLAMACON
+  DISLLAMAAS
   DISLLAMASP
   PROPERTIES
   LINKER_LANGUAGE C)
