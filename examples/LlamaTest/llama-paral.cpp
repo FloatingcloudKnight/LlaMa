@@ -30,6 +30,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <atomic>
 
 using namespace buddy;
 
@@ -44,16 +45,23 @@ MemRef<float, 2> myMemRef1({MaxTokenLength, HiddenSize1});
 MemRef<float, 3> myMemRef2({1, MaxTokenLength, HiddenSize0});
 MemRef<float, 3> myMemRef3({1, MaxTokenLength, HiddenSize0});
 
+std::atomic<bool> exit_flag(false);
+
+std::mutex mutex;
+std::mutex submutex;
 std::mutex mutex0;
 std::mutex mutex1;
 std::mutex mutex2;
 std::mutex mutex3;
+std::condition_variable cv;
+std::condition_variable subcv;
 std::condition_variable cv0;
 std::condition_variable cv1;
 std::condition_variable cv2;
 std::condition_variable cv3;
 bool ready0 = false, ready1 = false, ready2 = false, ready3 = false;
-bool done0 = false, done1 = false, done2 = false, done3 = false;
+bool subdone0 = true, subdone1 = true, subdone2 = true, subdone3 = true,
+     subdone = true, done = false;
 
 struct MemRefContainer {
   MemRef<float, 3> memRef3D0;
@@ -86,9 +94,7 @@ extern "C" void _mlir_ciface_forward194(MemRef<float, 3> *, MemRef<float, 3> *,
 extern "C" void _mlir_ciface_forward195(MemRef<float, 2> *, MemRef<float, 2> *,
                                         MemRef<float, 2> *, MemRef<float, 2> *,
                                         MemRef<float, 2> *);
-extern "C" void _mlir_ciface_forward196(MemRef<float, 3> *, MemRef<float, 3> *,
-                                        MemRef<float, 3> *, MemRef<float, 3> *,
-                                        MemRef<float, 3> *);
+extern "C" void _mlir_ciface_forward196(MemRef<float, 3> *, MemRef<float, 3> *);
 
 static void printDebugLogFile(const std::vector<float> &vec,
                               const std::string &filename) {
@@ -228,7 +234,8 @@ int main() {
 
   std::vector<std::string> paramsDirs; // 用容器存储路径
 
-  for (int i = 0; i < 194; i++) { // N 为需要生成的数量
+  for (int i = 0; i < sizeof(split_group) / sizeof(split_group[0]);
+       i++) { // N 为需要生成的数量
     for (int j = 0; j < split_group[i]; j++) {
       // 使用 emplace_back 直接构造字符串，避免拷贝
       paramsDirs.emplace_back(llamaBuildDir + "/subgraph" + std::to_string(i) +
@@ -252,21 +259,22 @@ int main() {
   MemRefContainer resultContainer(memRef3D0, memRef2D, memRef3D1, memRef3D2);
   MemRefContainer *resultContainerPtr = &resultContainer;
   MemRef<float, 3> resultMemRef({1, MaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultMemRef0({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 3> sub3DMemRef0({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 2> resultMemRef2D0({MaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultMemRef1({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 3> sub3DMemRef1({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 2> resultMemRef2D1({MaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultMemRef2({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 3> sub3DMemRef2({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 2> resultMemRef2D2({MaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultMemRef3({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 3> sub3DMemRef3({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 2> resultMemRef2D3({MaxTokenLength, HiddenSize});
   MemRef<float, 2> subResultContainer2D[2] = {
       MemRef<float, 2>({SubMaxTokenLength, HiddenSize}, false, 0),
       MemRef<float, 2>({SubMaxTokenLength, HiddenSize}, false, 0)};
+  MemRef<float, 3> subResultContainer[4] = {
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize}, false, 0),
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize}, false, 0),
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize}, false, 0),
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize}, false, 0)};
   Text<size_t, 2> inputContainer(inputStr);
 
   /// Fill data into containers
@@ -301,284 +309,367 @@ int main() {
     while (true) {
       {
         std::unique_lock<std::mutex> lock(mutex0);
-        cv0.wait(lock, [] { return ready0; });
+        cv.wait(lock, [] { return !subdone0 || exit_flag.load(); });
+        if (exit_flag.load()) break;
       }
-      for (int m0 = 0; m0 < 32; m0++) {
-        _mlir_ciface_forward1(&sub3DMemRef0, &paramsContainers[m0 * 6],
-                              &subResultMemRef0);
+      for (int m = 0; m < 32; m++) {
+        _mlir_ciface_forward1(&sub3DMemRef0, &paramsContainers[m * 10],
+                              &subResultContainer[0]);
         {
           std::lock_guard<std::mutex> lock(mutex0);
-          ready0 = false;
-          done0 = true;
+          done = false;
+          subdone0 = true;
         }
-        cv0.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex0);
-          cv0.wait(lock, [] { return ready0; });
+          cv.wait(lock, [] { return !subdone0; });
+          subdone0 = false;
         }
-        _mlir_ciface_forward2(&resultMemRef2D0, &paramsContainers[m0 * 6 + 1],
+        _mlir_ciface_forward2(&resultMemRef2D0, &paramsContainers[m * 10 + 1],
                               &resultMemRef, &myMemRef2, &myMemRef3,
                               &myMemRef1);
         {
           std::lock_guard<std::mutex> lock(mutex0);
-          ready0 = false;
-          done0 = true;
+          done = false;
+          subdone0 = true;
         }
-        cv0.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex0);
-          cv0.wait(lock, [] { return ready0; });
+          cv.wait(lock, [] { return !subdone0; });
+          subdone0 = false;
         }
-        _mlir_ciface_forward3(&subResultMemRef0, &subResultContainer2D[0],
-                              &subResultMemRef0);
-        _mlir_ciface_forward1(&sub3DMemRef0, &paramsContainers[m0 * 6 + 3],
-                              &subResultMemRef0);
+        _mlir_ciface_forward3(&subResultContainer[0], &subResultContainer2D[0],
+                              &subResultContainer[0]);
+        _mlir_ciface_forward1(&sub3DMemRef0, &paramsContainers[m * 10 + 5],
+                              &subResultContainer[0]);
         {
           std::lock_guard<std::mutex> lock(mutex0);
-          ready0 = false;
-          done0 = true;
+          done = false;
+          subdone0 = true;
         }
-        cv0.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex0);
-          cv0.wait(lock, [] { return ready0; });
+          cv.wait(lock, [] { return !subdone0; });
+          subdone0 = false;
         }
-        _mlir_ciface_forward5(&resultMemRef2D0, &paramsContainers[m0 * 6 + 4],
+        _mlir_ciface_forward5(&resultMemRef2D0, &paramsContainers[m * 10 + 6],
                               &resultMemRef);
         {
           std::lock_guard<std::mutex> lock(mutex0);
-          ready0 = false;
-          done0 = true;
+          done = false;
+          subdone0 = true;
         }
-        cv0.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex0);
-          cv0.wait(lock, [] { return ready0; });
+          cv.wait(lock, [] { return !subdone0; });
+          subdone0 = false;
         }
-        _mlir_ciface_forward3(&subResultMemRef0, &subResultContainer2D[0],
-                              &subResultMemRef0);
+        _mlir_ciface_forward3(&subResultContainer[0], &subResultContainer2D[0],
+                              &subResultContainer[0]);
       }
       {
         std::lock_guard<std::mutex> lock(mutex0);
-        ready0 = false;
-        done0 = true;
+        done = false;
+        subdone0 = true;
       }
-      cv0.notify_one();
+      if (subdone0 && subdone1 && subdone2 && subdone3) {
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = true;
+        subcv.notify_one();
+      }
     }
   });
 
-  // 线程1：处理 subResultMemRef1
+  // 线程1：处理 subResultContainer[1]
   std::thread t1([&]() {
     while (true) {
       {
         std::unique_lock<std::mutex> lock(mutex1);
-        cv1.wait(lock, [] { return ready1; });
+        cv.wait(lock, [] { return !subdone1 || exit_flag.load(); });
+        if (exit_flag.load()) break;
       }
-      for (int m1 = 0; m1 < 32; m1++) {
-        _mlir_ciface_forward1(&sub3DMemRef1, &paramsContainers[m1 * 6],
-                              &subResultMemRef1);
+      for (int m = 0; m < 32; m++) {
+        _mlir_ciface_forward1(&sub3DMemRef1, &paramsContainers[m * 10],
+                              &subResultContainer[1]);
         {
           std::lock_guard<std::mutex> lock(mutex1);
-          ready1 = false;
-          done1 = true;
+          done = false;
+          subdone1 = true;
         }
-        cv1.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex1);
-          cv1.wait(lock, [] { return ready1; });
+          cv.wait(lock, [] { return !subdone1; });
         }
 
-        _mlir_ciface_forward2(&resultMemRef2D1, &paramsContainers[m1 * 6 + 2],
+        _mlir_ciface_forward2(&resultMemRef2D1, &paramsContainers[m * 10 + 2],
                               &resultMemRef, &myMemRef2, &myMemRef3,
                               &myMemRef1);
         {
           std::lock_guard<std::mutex> lock(mutex1);
-          ready1 = false;
-          done1 = true;
+          done = false;
+          subdone1 = true;
         }
-        cv1.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex1);
-          cv1.wait(lock, [] { return ready1; });
+          cv.wait(lock, [] { return !subdone1; });
         }
-        _mlir_ciface_forward3(&subResultMemRef1, &subResultContainer2D[1],
-                              &subResultMemRef1);
-        _mlir_ciface_forward1(&sub3DMemRef1, &paramsContainers[m1 * 6 + 3],
-                              &subResultMemRef1);
+        _mlir_ciface_forward3(&subResultContainer[1], &subResultContainer2D[1],
+                              &subResultContainer[1]);
+        _mlir_ciface_forward1(&sub3DMemRef1, &paramsContainers[m * 10 + 5],
+                              &subResultContainer[1]);
         {
           std::lock_guard<std::mutex> lock(mutex1);
-          ready1 = false;
-          done1 = true;
+          done = false;
+          subdone1 = true;
         }
-        cv1.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex1);
-          cv1.wait(lock, [] { return ready1; });
+          cv.wait(lock, [] { return !subdone1; });
         }
-        _mlir_ciface_forward5(&resultMemRef2D1, &paramsContainers[m1 * 6 + 5],
+        _mlir_ciface_forward5(&resultMemRef2D1, &paramsContainers[m * 10 + 7],
                               &resultMemRef);
         {
           std::lock_guard<std::mutex> lock(mutex1);
-          ready1 = false;
-          done1 = true;
+          done = false;
+          subdone1 = true;
         }
-        cv1.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex1);
-          cv1.wait(lock, [] { return ready1; });
+          cv.wait(lock, [] { return !subdone1; });
         }
-        _mlir_ciface_forward3(&subResultMemRef1, &subResultContainer2D[1],
-                              &subResultMemRef1);
+        _mlir_ciface_forward3(&subResultContainer[1], &subResultContainer2D[1],
+                              &subResultContainer[1]);
       }
       {
         std::lock_guard<std::mutex> lock(mutex1);
-        ready1 = false;
-        done1 = true;
+        subdone1 = true;
       }
-      cv1.notify_one();
+      if (subdone0 && subdone1 && subdone2 && subdone3) {
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = true;
+        subcv.notify_one();
+      }
     }
   });
 
-  // 线程2：处理 subResultMemRef2
+  // 线程2：处理 subResultContainer[2]
   std::thread t2([&]() {
     while (true) {
       {
         std::unique_lock<std::mutex> lock(mutex2);
-        cv2.wait(lock, [] { return ready2; });
+        cv.wait(lock, [] { return !subdone2 || exit_flag.load(); });
+        if (exit_flag.load()) break;
       }
       for (int m = 0; m < 32; m++) {
-        _mlir_ciface_forward1(&sub3DMemRef2, &paramsContainers[m * 6],
-                              &subResultMemRef2);
+        _mlir_ciface_forward1(&sub3DMemRef2, &paramsContainers[m * 10],
+                              &subResultContainer[2]);
         {
           std::lock_guard<std::mutex> lock(mutex2);
-          ready2 = false;
-          done2 = true;
+          done = false;
+          subdone2 = true;
         }
-        cv2.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex2);
-          cv2.wait(lock, [] { return ready2; });
+          cv.wait(lock, [] { return !subdone2; });
         }
-
-        _mlir_ciface_forward2(&resultMemRef2D2, &paramsContainers[m * 6 + 2],
+        _mlir_ciface_forward2(&resultMemRef2D2, &paramsContainers[m * 10 + 3],
                               &resultMemRef, &myMemRef2, &myMemRef3,
                               &myMemRef1);
         {
           std::lock_guard<std::mutex> lock(mutex2);
-          ready2 = false;
-          done2 = true;
+          done = false;
+          subdone2 = true;
         }
-        cv2.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex2);
-          cv2.wait(lock, [] { return ready2; });
+          cv.wait(lock, [] { return !subdone2; });
         }
-        _mlir_ciface_forward3(&subResultMemRef2, &subResultContainer2D[2],
-                              &subResultMemRef2);
-        _mlir_ciface_forward1(&sub3DMemRef2, &paramsContainers[m * 6 + 3],
-                              &subResultMemRef2);
+        _mlir_ciface_forward3(&subResultContainer[2], &subResultContainer2D[2],
+                              &subResultContainer[2]);
+        _mlir_ciface_forward1(&sub3DMemRef2, &paramsContainers[m * 10 + 5],
+                              &subResultContainer[2]);
         {
           std::lock_guard<std::mutex> lock(mutex2);
-          ready2 = false;
-          done2 = true;
+          done = false;
+          subdone2 = true;
         }
-        cv2.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex2);
-          cv2.wait(lock, [] { return ready2; });
+          cv.wait(lock, [] { return !subdone2; });
         }
-        _mlir_ciface_forward5(&resultMemRef2D2, &paramsContainers[m * 6 + 5],
+        _mlir_ciface_forward5(&resultMemRef2D2, &paramsContainers[m * 10 + 8],
                               &resultMemRef);
         {
           std::lock_guard<std::mutex> lock(mutex2);
-          ready2 = false;
-          done2 = true;
+          done = false;
+          subdone2 = true;
         }
-        cv2.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex2);
-          cv2.wait(lock, [] { return ready2; });
+          cv.wait(lock, [] { return !subdone2; });
         }
-        _mlir_ciface_forward3(&subResultMemRef2, &subResultContainer2D[2],
-                              &subResultMemRef2);
+        _mlir_ciface_forward3(&subResultContainer[2], &subResultContainer2D[2],
+                              &subResultContainer[2]);
       }
       {
         std::lock_guard<std::mutex> lock(mutex2);
-        ready2 = false;
-        done2 = true;
+        subdone2 = true;
       }
-      cv2.notify_one();
+      if (subdone0 && subdone1 && subdone2 && subdone3) {
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = true;
+        subcv.notify_one();
+      }
     }
   });
-  // 线程3：处理 subResultMemRef3
+  // 线程3：处理 subResultContainer[3]
   std::thread t3([&]() {
     while (true) {
       {
         std::unique_lock<std::mutex> lock(mutex3);
-        cv3.wait(lock, [] { return ready3; });
+        cv.wait(lock, [] { return !subdone3 || exit_flag.load(); });
+        if (exit_flag.load()) break;
       }
       for (int m = 0; m < 32; m++) {
-        _mlir_ciface_forward1(&sub3DMemRef3, &paramsContainers[m * 6],
-                              &subResultMemRef3);
+        _mlir_ciface_forward1(&sub3DMemRef3, &paramsContainers[m * 10],
+                              &subResultContainer[3]);
         {
           std::lock_guard<std::mutex> lock(mutex3);
-          ready3 = false;
-          done3 = true;
+          done = false;
+          subdone3 = true;
         }
-        cv3.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex3);
-          cv3.wait(lock, [] { return ready3; });
+          cv.wait(lock, [] { return !subdone3; });
         }
-
-        _mlir_ciface_forward2(&resultMemRef2D3, &paramsContainers[m * 6 + 2],
+        _mlir_ciface_forward2(&resultMemRef2D3, &paramsContainers[m * 10 + 4],
                               &resultMemRef, &myMemRef2, &myMemRef3,
                               &myMemRef1);
         {
           std::lock_guard<std::mutex> lock(mutex3);
-          ready3 = false;
-          done3 = true;
+          done = false;
+          subdone3 = true;
         }
-        cv3.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex3);
-          cv3.wait(lock, [] { return ready3; });
+          cv.wait(lock, [] { return !subdone3; });
         }
-        _mlir_ciface_forward3(&subResultMemRef3, &subResultContainer2D[3],
-                              &subResultMemRef3);
-        _mlir_ciface_forward1(&sub3DMemRef3, &paramsContainers[m * 6 + 3],
-                              &subResultMemRef3);
+        _mlir_ciface_forward3(&subResultContainer[3], &subResultContainer2D[3],
+                              &subResultContainer[3]);
+        _mlir_ciface_forward1(&sub3DMemRef3, &paramsContainers[m * 10 + 5],
+                              &subResultContainer[3]);
         {
           std::lock_guard<std::mutex> lock(mutex3);
-          ready3 = false;
-          done3 = true;
+          done = false;
+          subdone3 = true;
         }
-        cv3.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex3);
-          cv3.wait(lock, [] { return ready3; });
+          cv.wait(lock, [] { return !subdone3; });
         }
-        _mlir_ciface_forward5(&resultMemRef2D3, &paramsContainers[m * 6 + 5],
+        _mlir_ciface_forward5(&resultMemRef2D3, &paramsContainers[m * 10 + 9],
                               &resultMemRef);
         {
           std::lock_guard<std::mutex> lock(mutex3);
-          ready3 = false;
-          done3 = true;
+          done = false;
+          subdone3 = true;
         }
-        cv3.notify_one();
+        if (subdone0 && subdone1 && subdone2 && subdone3) {
+          std::lock_guard<std::mutex> lock(submutex);
+          subdone = true;
+          subcv.notify_one();
+        }
         {
           std::unique_lock<std::mutex> lock(mutex3);
-          cv3.wait(lock, [] { return ready3; });
+          cv.wait(lock, [] { return !subdone3; });
         }
-        _mlir_ciface_forward3(&subResultMemRef3, &subResultContainer2D[3],
-                              &subResultMemRef3);
+        _mlir_ciface_forward3(&subResultContainer[3], &subResultContainer2D[3],
+                              &subResultContainer[3]);
       }
       {
         std::lock_guard<std::mutex> lock(mutex3);
-        ready3 = false;
-        done3 = true;
+        subdone3 = true;
       }
-      cv3.notify_one();
+      if (subdone0 && subdone1 && subdone2 && subdone3) {
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = true;
+        subcv.notify_one();
+      }
     }
   });
   /// Run LLaMA Inference
@@ -586,7 +677,7 @@ int main() {
   //  - Find and append the generated token.
   //  - Continue iterating until the terminal condition is met.
   int generateLen = MaxTokenLength - inputContainer.getTokenCnt();
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 1; i++) {
     const auto inferenceStart = std::chrono::high_resolution_clock::now();
 
     // Execute the forward pass of the model.
@@ -598,244 +689,105 @@ int main() {
       myMemRef3 = resultContainerPtr->memRef3D2;
     }
 
-    resultContainerPtr->memRef3D0.splitMemRef(
-        std::move(resultContainerPtr->memRef3D0), subResultMemRef0,
-        subResultMemRef1, 1, 20);
-    _mlir_ciface_forward196(&subResultMemRef0, &subResultMemRef1, 
-                            &subResultMemRef2, &subResultMemRef3,
-                            subResultContainer2D);
+    // resultContainerPtr->memRef3D0.splitMemRef(
+    //     std::move(resultContainerPtr->memRef3D0), subResultContainer[0],
+    //     subResultContainer[1], 1, 20);
+    _mlir_ciface_forward196(subResultContainer, &resultContainerPtr->memRef3D0);
     {
-      std::lock_guard<std::mutex> lock(mutex0);
-      ready0 = true;
+      std::lock_guard<std::mutex> lock(submutex);
+      subdone = false;
+      subdone0 = false;
+      subdone1 = false;
+      subdone2 = false;
+      subdone3 = false;
+      done = true;
     }
-    cv0.notify_one();
-    {
-      std::lock_guard<std::mutex> lock(mutex1);
-      ready1 = true;
-    }
-    cv1.notify_one();
-    {
-      std::lock_guard<std::mutex> lock(mutex2);
-      ready2 = true;
-    }
-    cv2.notify_one();
-    {
-      std::lock_guard<std::mutex> lock(mutex3);
-      ready3 = true;
-    }
-    cv3.notify_one();
+    cv.notify_all();
     for (int m = 0; m < 32; m++) {
       // after forward1
       {
-        std::unique_lock<std::mutex> lock(mutex0);
-        cv0.wait(lock, [] { return done0; });
+        std::unique_lock<std::mutex> lock(submutex);
+        subcv.wait(lock, [] { return subdone; });
       }
+      _mlir_ciface_forward194(&resultMemRef, &sub3DMemRef0, &sub3DMemRef1,
+                              &sub3DMemRef2, &sub3DMemRef3);
       {
-        std::unique_lock<std::mutex> lock(mutex1);
-        cv1.wait(lock, [] { return done1; });
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = false;
+        subdone0 = false;
+        subdone1 = false;
+        subdone2 = false;
+        subdone3 = false;
+        done = true;
       }
-      {
-        std::unique_lock<std::mutex> lock(mutex2);
-        cv2.wait(lock, [] { return done2; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex3);
-        cv3.wait(lock, [] { return done3; });
-      }
-      _mlir_ciface_forward194(&resultMemRef, &sub3DMemRef0, &sub3DMemRef1, &sub3DMemRef2, &sub3DMemRef3);
-      {
-        std::lock_guard<std::mutex> lock(mutex0);
-        done0 = false;
-        ready0 = true;
-      }
-      cv0.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex1);
-        done1 = false;
-        ready1 = true;
-      }
-      cv1.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex2);
-        done2 = false;
-        ready2 = true;
-      }
-      cv2.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex3);
-        done3 = false;
-        ready3 = true;
-      }
-      cv3.notify_one();
+      cv.notify_all();
       // after forward2
       {
-        std::unique_lock<std::mutex> lock(mutex0);
-        cv0.wait(lock, [] { return done0; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex1);
-        cv1.wait(lock, [] { return done1; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex2);
-        cv2.wait(lock, [] { return done2; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex3);
-        cv3.wait(lock, [] { return done3; });
+        std::unique_lock<std::mutex> lock(submutex);
+        subcv.wait(lock, [] { return subdone; });
       }
       _mlir_ciface_forward195(subResultContainer2D, &resultMemRef2D0,
-                              &resultMemRef2D1);
+                              &resultMemRef2D1, &resultMemRef2D2,
+                              &resultMemRef2D3);
       {
-        std::lock_guard<std::mutex> lock(mutex0);
-        done0 = false;
-        ready0 = true;
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = false;
+        subdone0 = false;
+        subdone1 = false;
+        subdone2 = false;
+        subdone3 = false;
+        done = true;
       }
-      cv0.notify_one();
+      cv.notify_all();
+      // after forward1 again
       {
-        std::lock_guard<std::mutex> lock(mutex1);
-        done1 = false;
-        ready1 = true;
+        std::unique_lock<std::mutex> lock(submutex);
+        subcv.wait(lock, [] { return subdone; });
       }
-      cv1.notify_one();
+      _mlir_ciface_forward194(&resultMemRef, &sub3DMemRef0, &sub3DMemRef1,
+                              &sub3DMemRef2, &sub3DMemRef3);
       {
-        std::lock_guard<std::mutex> lock(mutex2);
-        done2 = false;
-        ready2 = true;
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = false;
+        subdone0 = false;
+        subdone1 = false;
+        subdone2 = false;
+        subdone3 = false;
+        done = true;
       }
-      cv2.notify_one();
+      cv.notify_all();
+      // after forward5
       {
-        std::lock_guard<std::mutex> lock(mutex3);
-        done3 = false;
-        ready3 = true;
-      }
-      cv3.notify_one();
-      // after forward2
-      {
-        std::unique_lock<std::mutex> lock(mutex0);
-        cv0.wait(lock, [] { return done0; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex1);
-        cv1.wait(lock, [] { return done1; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex2);
-        cv2.wait(lock, [] { return done2; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex3);
-        cv3.wait(lock, [] { return done3; });
-      }
-      _mlir_ciface_forward194(&resultMemRef, &sub3DMemRef0, &sub3DMemRef1);
-      {
-        std::lock_guard<std::mutex> lock(mutex0);
-        done0 = false;
-        ready0 = true;
-      }
-      cv0.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex1);
-        done1 = false;
-        ready1 = true;
-      }
-      cv1.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex2);
-        done2 = false;
-        ready2 = true;
-      }
-      cv2.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex3);
-        done3 = false;
-        ready3 = true;
-      }
-      cv3.notify_one();
-      // after forward2
-      {
-        std::unique_lock<std::mutex> lock(mutex0);
-        cv0.wait(lock, [] { return done0; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex1);
-        cv1.wait(lock, [] { return done1; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex2);
-        cv2.wait(lock, [] { return done2; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex3);
-        cv3.wait(lock, [] { return done3; });
+        std::unique_lock<std::mutex> lock(submutex);
+        subcv.wait(lock, [] { return subdone; });
       }
       _mlir_ciface_forward195(subResultContainer2D, &resultMemRef2D0,
-                              &resultMemRef2D1);
+                              &resultMemRef2D1, &resultMemRef2D2,
+                              &resultMemRef2D3);
       {
-        std::lock_guard<std::mutex> lock(mutex0);
-        done0 = false;
-        ready0 = true;
+        std::lock_guard<std::mutex> lock(submutex);
+        subdone = false;
+        subdone0 = false;
+        subdone1 = false;
+        subdone2 = false;
+        subdone3 = false;
+        done = true;
       }
-      cv0.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex1);
-        done1 = false;
-        ready1 = true;
-      }
-      cv1.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex2);
-        done2 = false;
-        ready2 = true;
-      }
-      cv2.notify_one();
-      {
-        std::lock_guard<std::mutex> lock(mutex3);
-        done3 = false;
-        ready3 = true;
-      }
-      cv3.notify_one();
-      // after forward2
-      {
-        std::unique_lock<std::mutex> lock(mutex0);
-        cv0.wait(lock, [] { return done0; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex1);
-        cv1.wait(lock, [] { return done1; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex2);
-        cv2.wait(lock, [] { return done2; });
-      }
-      {
-        std::unique_lock<std::mutex> lock(mutex3);
-        cv3.wait(lock, [] { return done3; });
-      }
+      cv.notify_all();
     }
     // Wait for the threads to finish processing.
     {
-      std::unique_lock<std::mutex> lock(mutex0);
-      cv0.wait(lock, [] { return done0; });
-      done0 = false;
+      std::unique_lock<std::mutex> lock(submutex);
+      subcv.wait(lock, [] { return subdone; });
+      subdone = true;
+      subdone0 = true;
+      subdone1 = true;
+      subdone2 = true;
+      subdone3 = true;
     }
-    {
-      std::unique_lock<std::mutex> lock(mutex1);
-      cv1.wait(lock, [] { return done1; });
-      done1 = false;
-    }
-    {
-      std::unique_lock<std::mutex> lock(mutex2);
-      cv2.wait(lock, [] { return done2; });
-      done2 = false;
-    }
-    {
-      std::unique_lock<std::mutex> lock(mutex3);
-      cv3.wait(lock, [] { return done3; });
-      done3 = false;
-    }
-    _mlir_ciface_forward194(&resultMemRef, &subResultMemRef0,
-                            &subResultMemRef1);
+    _mlir_ciface_forward194(&resultMemRef, &subResultContainer[0],
+                            &subResultContainer[1], &subResultContainer[2],
+                            &subResultContainer[3]);
     _mlir_ciface_forward193(&resultMemRef, &paramsContainer2, &resultMemRef);
     const auto inferenceEnd = std::chrono::high_resolution_clock::now();
     const std::chrono::duration<double, std::milli> inferenceTime =
@@ -859,9 +811,17 @@ int main() {
     inputContainer.appendTokenIdx(maxIndex);
     outputContainer.appendTokenIdx(maxIndex);
   }
-  t0.detach();
-  t1.detach();
-  t2.detach();
+
+  {
+  std::lock_guard<std::mutex> lock(submutex);
+
+  exit_flag = true;
+  cv.notify_all(); 
+  }
+  t0.join();
+  t1.join();
+  t2.join();
+  t3.join();
 
   /// Print the final result
   std::cout << "\n\033[33;1m[Input]\033[0m " << inputStr << std::endl;
