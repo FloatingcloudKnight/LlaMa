@@ -62,7 +62,7 @@ public:
   // Concat two MemRefs into a MemRef.
   void concatenateMemRefs(MemRef<T, N> &other0, MemRef<T, N> &other1, MemRef<T, N> &other2, size_t concatDim);
   // Split a MemRef into two MemRefs.
-  void splitMemRef(MemRef<T, N> &&other0, MemRef<T, N> &other1, MemRef<T, N> &other2, size_t splitDim, size_t splitIndex);
+  void splitMemRef(MemRef<T, N> &&other0, MemRef<T, N> &other1, MemRef<T, N> &other2, MemRef<T, N> &other3, MemRef<T, N> &other4, size_t splitDim, size_t splitIndex);
   // Add two MemRef
   void addMemRef(MemRef<T, N>& a, MemRef<T, N>& b);
   // Get the data pointer.
@@ -456,7 +456,7 @@ void MemRef<T, N>::concatenateMemRefs(MemRef<T, N> &other0, MemRef<T, N> &other1
 
 template <typename T, std::size_t N>
 void MemRef<T, N>::splitMemRef(MemRef<T, N> &&other0, MemRef<T, N> &other1,
-                 MemRef<T, N> &other2, size_t splitDim, size_t splitIndex) {
+                 MemRef<T, N> &other2, MemRef<T, N> &other3, MemRef<T, N> &other4, size_t splitDim, size_t splitIndex) {
   // 检查分割维度是否合法
   if (splitDim >= N) {
     throw std::runtime_error("Invalid split dimension.");
@@ -467,24 +467,26 @@ void MemRef<T, N>::splitMemRef(MemRef<T, N> &&other0, MemRef<T, N> &other1,
     throw std::runtime_error("Split index out of bounds.");
   }
 
-  // 设置 other1 的尺寸
-  intptr_t *sizes1 = const_cast<intptr_t *>(other1.getSizes());
-  const intptr_t *sizes0 = other0.getSizes();
-  for (size_t i = 0; i < N; i++) {
-    sizes1[i] = sizes0[i];
-  }
-  sizes1[splitDim] = splitIndex;
+  // // 设置 other1 的尺寸
+  // intptr_t *sizes1 = const_cast<intptr_t *>(other1.getSizes());
+  // const intptr_t *sizes0 = other0.getSizes();
+  // for (size_t i = 0; i < N; i++) {
+  //   sizes1[i] = sizes0[i];
+  // }
+  // sizes1[splitDim] = splitIndex;
 
-  // 设置 other2 的尺寸
-  intptr_t *sizes2 = const_cast<intptr_t *>(other2.getSizes());
-  for (size_t i = 0; i < N; i++) {
-    sizes2[i] = sizes0[i];
-  }
-  sizes2[splitDim] = sizes0[splitDim] - splitIndex;
+  // // 设置 other2 的尺寸
+  // intptr_t *sizes2 = const_cast<intptr_t *>(other2.getSizes());
+  // for (size_t i = 0; i < N; i++) {
+  //   sizes2[i] = sizes0[i];
+  // }
+  // sizes2[splitDim] = sizes0[splitDim] - splitIndex;
 
   // 设置 strides
   other1.setStrides();
   other2.setStrides();
+  other3.setStrides();
+  other4.setStrides();
 
   // 移动 other0 的资源到 other1
   other1.allocated = other0.allocated;
@@ -495,6 +497,16 @@ void MemRef<T, N>::splitMemRef(MemRef<T, N> &&other0, MemRef<T, N> &other1,
   other2.allocated = nullptr;
   other2.aligned = other0.aligned + other1.getSize();
   other2.offset = other0.offset;
+
+  // 设置 other3 的 aligned 和 offset
+  other3.allocated = nullptr;
+  other3.aligned = other2.aligned + other2.getSize();
+  other3.offset = other0.offset;
+
+  // 设置 other4 的 aligned 和 offset
+  other4.allocated = nullptr;
+  other4.aligned = other3.aligned + other3.getSize();
+  other4.offset = other0.offset;
 
   // 清空 other0 的资源
   other0.allocated = nullptr;

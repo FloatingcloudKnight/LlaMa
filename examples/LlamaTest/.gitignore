@@ -1,8 +1,5 @@
 # model params file
 *.data
 
-# model mlir file
-*.mlir
-
 # model debug file
 *.log
