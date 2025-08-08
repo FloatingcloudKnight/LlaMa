@@ -6,6 +6,6 @@ module {
     %cast_1 = memref.cast %arg2 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
     %cast_2 = memref.cast %arg3 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
     %0:4 = call @subgraph195(%cast, %cast_0, %cast_1, %cast_2) : (memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>) -> (memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>)
-    return %0#0, %0#1, %0#0, %0#1 : memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>
+    return %0#0, %0#1, %0#2, %0#3 : memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>
   }
 }

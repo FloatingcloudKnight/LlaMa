@@ -636,13 +636,9 @@ int main() {
         subcv.wait(lock,
                    [] { return subdone0 && subdone1 && subdone2 && subdone3; });
       }
-      // _mlir_ciface_forward195(subResultContainer2D, &resultMemRef2D0,
-      //                         &resultMemRef2D1, &resultMemRef2D2,
-      //                         &resultMemRef2D3);
-      resultMemRef2D0.addMemRef(resultMemRef2D0, resultMemRef2D1);
-      resultMemRef2D2.addMemRef(resultMemRef2D2, resultMemRef2D3);
-      resultMemRef2D0.addMemRef(resultMemRef2D0, resultMemRef2D2);
-      resultMemRef2D0.splitMemRef(std::move(resultMemRef2D0), subResultContainer2D[0], subResultContainer2D[1], subResultContainer2D[2], subResultContainer2D[3], 1, 10);
+      _mlir_ciface_forward195(subResultContainer2D, &resultMemRef2D0,
+                              &resultMemRef2D1, &resultMemRef2D2,
+                              &resultMemRef2D3);
       {
         std::lock_guard<std::mutex> lock(submutex);
         subdone0 = false;
@@ -673,13 +669,9 @@ int main() {
         subcv.wait(lock,
                    [] { return subdone0 && subdone1 && subdone2 && subdone3; });
       }
-      // _mlir_ciface_forward195(subResultContainer2D0, &resultMemRef2D0,
-      //                         &resultMemRef2D1, &resultMemRef2D2,
-      //                         &resultMemRef2D3);
-      resultMemRef2D0.addMemRef(resultMemRef2D0, resultMemRef2D1);
-      resultMemRef2D2.addMemRef(resultMemRef2D2, resultMemRef2D3);
-      resultMemRef2D0.addMemRef(resultMemRef2D0, resultMemRef2D2);
-      resultMemRef2D0.splitMemRef(std::move(resultMemRef2D0), subResultContainer2D[0], subResultContainer2D[1], subResultContainer2D[2], subResultContainer2D[3], 1, 10);
+      _mlir_ciface_forward195(subResultContainer2D, &resultMemRef2D0,
+                              &resultMemRef2D1, &resultMemRef2D2,
+                              &resultMemRef2D3);
       {
         std::lock_guard<std::mutex> lock(submutex);
         subdone0 = false;
