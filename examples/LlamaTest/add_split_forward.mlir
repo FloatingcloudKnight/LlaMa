@@ -1,11 +1,15 @@
 module {
-  func.func private @subgraph195(memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>) -> (memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>)
-  func.func @forward195(%arg0: memref<40x4096xf32>, %arg1: memref<40x4096xf32>, %arg2: memref<40x4096xf32>, %arg3: memref<40x4096xf32>) -> (memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>) {
+  func.func private @subgraph195(memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>) -> (memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>)
+  func.func @forward195(%arg0: memref<40x4096xf32>, %arg1: memref<40x4096xf32>, %arg2: memref<40x4096xf32>, %arg3: memref<40x4096xf32>, %arg4: memref<40x4096xf32>, %arg5: memref<40x4096xf32>, %arg6: memref<40x4096xf32>, %arg7: memref<40x4096xf32>) -> (memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>) {
     %cast = memref.cast %arg0 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
     %cast_0 = memref.cast %arg1 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
     %cast_1 = memref.cast %arg2 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
     %cast_2 = memref.cast %arg3 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
-    %0:4 = call @subgraph195(%cast, %cast_0, %cast_1, %cast_2) : (memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>) -> (memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>)
-    return %0#0, %0#1, %0#2, %0#3 : memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>, memref<10x4096xf32>
+    %cast_3 = memref.cast %arg4 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
+    %cast_4 = memref.cast %arg5 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
+    %cast_5 = memref.cast %arg6 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
+    %cast_6 = memref.cast %arg7 : memref<40x4096xf32> to memref<40x4096xf32, strided<[4096, 1], offset: ?>>
+    %0:8 = call @subgraph195(%cast, %cast_0, %cast_1, %cast_2, %cast_3, %cast_4, %cast_5, %cast_6) : (memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>, memref<40x4096xf32, strided<[4096, 1], offset: ?>>) -> (memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>)
+    return %0#0, %0#1, %0#2, %0#3, %0#4, %0#5, %0#6, %0#7 : memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>, memref<5x4096xf32>
   }
 }
