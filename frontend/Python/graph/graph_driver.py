@@ -164,9 +164,8 @@ class GraphDriver:
         self.group_map_device = {}
         # 对计算图的op进行分组，分组策略为：以PowOp为间隔放在一个subgraph中，忽略PlaceholderOp和OutputOp
         submodel_count = 0
-        ops_count = [6, 50, 2, 6, 14, 2]
-        pow_count = 0
-        tsf_count = 0
+        ops_count = [50, 8, 14, 8]
+        op_count = 0
         for i, op in enumerate(self._graph._body):
           if isinstance(op, PlaceholderOp) or isinstance(op, OutputOp):
             continue
@@ -178,29 +177,34 @@ class GraphDriver:
             continue
           
           # todo: Added handling of more complex embedding cases
-          if isinstance(op, PowOp):
-            pow_count += 1
+          if isinstance(op, PowOp) and submodel_count == 0:
             submodel_count += 1
-            tsf_count = 1
+            op_count = 1
             subgraph_name = "subgraph{}".format(submodel_count)
             self.group_map_device[subgraph_name] = DeviceType.CPU
             self.op_groups[subgraph_name] = [op]
             continue
           
-          if pow_count > 0 and pow_count < 65:
-            if tsf_count == ops_count[(submodel_count-1)%6]:
-              tsf_count = 1
-              submodel_count += 1
-              subgraph_name = "subgraph{}".format(submodel_count)
-              self.group_map_device[subgraph_name] = DeviceType.CPU
-              self.op_groups[subgraph_name] = [op]
-              continue
-            else:
-              tsf_count += 1
+          if submodel_count == 1 and op_count == 6:
+            op_count = 1
+            submodel_count += 1
+            subgraph_name = "subgraph{}".format(submodel_count)
+            self.group_map_device[subgraph_name] = DeviceType.CPU
+            self.op_groups[subgraph_name] = [op]
+            continue
+
+          if submodel_count > 1 and op_count == ops_count[(submodel_count-2) % 4]:
+            op_count = 1
+            submodel_count += 1
+            subgraph_name = "subgraph{}".format(submodel_count)
+            self.group_map_device[subgraph_name] = DeviceType.CPU
+            self.op_groups[subgraph_name] = [op]
+            continue
 
           subgraph_name = "subgraph{}".format(submodel_count)
           group = self.op_groups[subgraph_name]
           group.append(op)
+          op_count += 1
           self.op_groups[subgraph_name] = group
           
       self._subgraph_dependencies = {
@@ -213,16 +217,19 @@ class GraphDriver:
       subgraphs_inputs = {}
 
       # 预置每个权重矩阵的分割位置
-      paral_pos0 = [-1, -1, -1]
-      paral_pos1 = [[1, -1], [0, -1, 0, 0, -1, -1, -1, 1], [0, 1], [1, -1], [0, -1, 0, 1], [0, 1]]
+      embedding_pos = [-1, -1, -1]
+      rms_norm_pos = [1, -1]
+      transformer_pos = [[0, -1, 0, 0, -1, -1, -1, 1], [0, 1, -1], [0, -1, 0, 1], [0, 1, -1]]
 
       # Identify inputs for each subgraph
       for i, subgraph_name in enumerate(self.op_groups.keys()):
           subgraphs_inputs[subgraph_name] = []
-          if(i == 0 or i == 193):
-              paral_pos = paral_pos0
+          if(i == 0 or i == submodel_count):
+              paral_pos = embedding_pos
+          elif(i == 1):
+              paral_pos = rms_norm_pos
           else:
-              paral_pos = paral_pos1[(i-1)%6]
+              paral_pos = transformer_pos[(i-2)%4]
           input_count = 0
           for op in self.op_groups[subgraph_name]:
               for parent in op._parents:

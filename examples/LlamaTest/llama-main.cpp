@@ -57,11 +57,11 @@ extern "C" void _mlir_ciface_forward1(MemRef<float, 3> *, MemRef<float, 1> *,
 extern "C" void _mlir_ciface_forward2(MemRef<float, 2> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *, MemRef<float, 3> *,
                                       MemRef<float, 3> *, MemRef<float, 2> *);
-extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 2> *,
+extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 1> *, MemRef<float, 2> *,
                                       MemRef<float, 3> *);
-extern "C" void _mlir_ciface_forward5(MemRef<float, 2> *, MemRef<float, 1> *,
+extern "C" void _mlir_ciface_forward4(MemRef<float, 2> *, MemRef<float, 1> *,
                                       MemRef<float, 3> *);
-extern "C" void _mlir_ciface_forward193(MemRef<float, 3> *, MemRef<float, 1> *,
+extern "C" void _mlir_ciface_forward130(MemRef<float, 3> *, MemRef<float, 1> *,
                                         MemRef<float, 3> *);
 
 /// Capture input message.
@@ -142,44 +142,16 @@ int main() {
   std::cout << "\033[33;1m" << title << "\033[0m" << std::endl;
 
   int split_group[] = {
-      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
-      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1,
-      2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2,
-      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
-      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1,
-      2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2,
-      1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1,
-      1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1};
+      1, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 1};
   constexpr size_t param_size_group[] = {
-      131072064, 4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 4096,     33554432, 0, 4096, 67633152,
-      0,         4096, 33554432, 0, 4096,     67633152, 0, 4096, 33554432,
-      0,         4096, 67633152, 0, 131076096};
+      131072064, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 33554432, 4096, 67633152, 4096, 131072000};
   /// Define directories of vacabulary and parameter file.
   std::string llamaDir = LLAMA_DIS_EXAMPLE_PATH;
   std::string llamaBuildDir = LLAMA_EXAMPLE_BUILD_PATH;
   const std::string vocabDir = llamaDir + "/vocab.txt";
   std::vector<std::string> paramsDirs; // 用容器存储路径
 
-  for (int i = 0; i < 194; i++) { // N 为需要生成的数量
+  for (int i = 0; i < 131; i++) { // N 为需要生成的数量
     for (int j = 0; j < split_group[i]; j++) {
       // 使用 emplace_back 直接构造字符串，避免拷贝
       paramsDirs.emplace_back(llamaBuildDir + "/subgraph" + std::to_string(i) +
@@ -202,9 +174,13 @@ int main() {
   MemRef<float, 3> myMemRef4({1, MaxTokenLength, HiddenSize0});
   MemRefContainer resultContainer(myMemRef1, myMemRef2, myMemRef3, myMemRef4);
   MemRefContainer *resultContainerPtr = &resultContainer;
+  MemRef<float, 3> subResultContainer0[2] = {
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize}),
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize})};
+  MemRef<float, 3> subResultContainer1[2] = {
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize}),
+      MemRef<float, 3>({1, SubMaxTokenLength, HiddenSize})};
   MemRef<float, 3> resultContainer0({1, MaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultContainer0({1, SubMaxTokenLength, HiddenSize});
-  MemRef<float, 3> subResultContainer1({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 3> tmp3DContainer({1, MaxTokenLength, HiddenSize});
   MemRef<float, 3> sub3DContainer0({1, SubMaxTokenLength, HiddenSize});
   MemRef<float, 3> sub3DContainer1({1, SubMaxTokenLength, HiddenSize});
@@ -225,17 +201,15 @@ int main() {
   MemRef<float, 1> paramsContainer0({param_size_group[0]});
   loadParameters(paramsDirs[0], paramsContainer0);
   int params_count = 1;
-  for (int i = 1; i < 193; i++) {
+  for (int i = 1; i < 130; i++) {
     for (int j = 0; j < split_group[i]; j++) {
-      if (param_size_group[i] > 0) {
-        MemRef<float, 1> paramsContainer1({param_size_group[i]});
-        loadParameters(paramsDirs[params_count], paramsContainer1);
-        paramsContainers.push_back(paramsContainer1);
-      }
+      MemRef<float, 1> paramsContainer1({param_size_group[i]});
+      loadParameters(paramsDirs[params_count], paramsContainer1);
+      paramsContainers.push_back(paramsContainer1);
       params_count++;
     }
   }
-  MemRef<float, 1> paramsContainer2({param_size_group[193]});
+  MemRef<float, 1> paramsContainer2({param_size_group[130]});
   loadParameters(paramsDirs[params_count], paramsContainer2);
 
   /// Run LLaMA Inference
@@ -254,15 +228,15 @@ int main() {
     auto resultContainer2 = resultContainerPtr->memRef3D1;
     auto resultContainer3 = resultContainerPtr->memRef3D2;
     resultContainer0.splitMemRef(std::move(resultContainer0),
-                                 subResultContainer0, subResultContainer1, 1,
+                                 subResultContainer0[0], subResultContainer1[0], 1,
                                  20);
+    _mlir_ciface_forward1(&subResultContainer0[1], &paramsContainers[0],
+                            &subResultContainer0[0]);
+    _mlir_ciface_forward1(&subResultContainer1[1], &paramsContainers[0],
+                          &subResultContainer1[0]);
     for (int m = 0; m < 32; m++) {
-      _mlir_ciface_forward1(&sub3DContainer0, &paramsContainers[m * 6],
-                            &subResultContainer0);
-      _mlir_ciface_forward1(&sub3DContainer1, &paramsContainers[m * 6],
-                            &subResultContainer1);
-      tmp3DContainer.concatenateMemRefs(sub3DContainer0, sub3DContainer1,
-                                        tmp3DContainer, 1);
+      tmp3DContainer.concatenateMemRefs(subResultContainer0[1], subResultContainer1[1],
+                                      tmp3DContainer, 1);
       _mlir_ciface_forward2(&tmp2DContainer0, &paramsContainers[m * 6 + 1],
                             &tmp3DContainer, &resultContainer2,
                             &resultContainer3, &resultContainer1);
@@ -272,31 +246,27 @@ int main() {
       tmp2DContainer0.addMemRef(tmp2DContainer0, tmp2DContainer1);
       tmp2DContainer0.splitMemRef(std::move(tmp2DContainer0), sub2DContainer0,
                                   sub2DContainer1, 0, 20);
-      _mlir_ciface_forward3(&subResultContainer0, &sub2DContainer0,
-                            &subResultContainer0);
-      _mlir_ciface_forward3(&subResultContainer1, &sub2DContainer1,
-                            &subResultContainer1);
-      _mlir_ciface_forward1(&sub3DContainer0, &paramsContainers[m * 6 + 3],
-                            &subResultContainer0);
-      _mlir_ciface_forward1(&sub3DContainer1, &paramsContainers[m * 6 + 3],
-                            &subResultContainer1);
-      tmp3DContainer.concatenateMemRefs(sub3DContainer0, sub3DContainer1,
+      _mlir_ciface_forward3(subResultContainer0, &paramsContainers[m * 6 + 3], &sub2DContainer0,
+                            &subResultContainer0[0]);
+      _mlir_ciface_forward3(subResultContainer1, &paramsContainers[m * 6 + 3], &sub2DContainer1,
+                            &subResultContainer1[0]);
+      tmp3DContainer.concatenateMemRefs(subResultContainer0[1], subResultContainer1[1],
                                         tmp3DContainer, 1);
-      _mlir_ciface_forward5(&tmp2DContainer0, &paramsContainers[m * 6 + 4],
+      _mlir_ciface_forward4(&tmp2DContainer0, &paramsContainers[m * 6 + 4],
                             &tmp3DContainer);
-      _mlir_ciface_forward5(&tmp2DContainer1, &paramsContainers[m * 6 + 5],
+      _mlir_ciface_forward4(&tmp2DContainer1, &paramsContainers[m * 6 + 5],
                             &tmp3DContainer);
       tmp2DContainer0.addMemRef(tmp2DContainer0, tmp2DContainer1);
       tmp2DContainer0.splitMemRef(std::move(tmp2DContainer0), sub2DContainer0,
                                   sub2DContainer1, 0, 20);
-      _mlir_ciface_forward3(&subResultContainer0, &sub2DContainer0,
-                            &subResultContainer0);
-      _mlir_ciface_forward3(&subResultContainer1, &sub2DContainer1,
-                            &subResultContainer1);
+      _mlir_ciface_forward3(subResultContainer0, &paramsContainers[m * 6 + 6], &sub2DContainer0,
+                            &subResultContainer0[0]);
+      _mlir_ciface_forward3(subResultContainer1, &paramsContainers[m * 6 + 6], &sub2DContainer1,
+                            &subResultContainer1[0]);
     }
-    tmp3DContainer.concatenateMemRefs(subResultContainer0, subResultContainer1,
+    tmp3DContainer.concatenateMemRefs(subResultContainer0[1], subResultContainer1[1],
                                       tmp3DContainer, 1);
-    _mlir_ciface_forward193(&resultContainer0, &paramsContainer2,
+    _mlir_ciface_forward130(&resultContainer0, &paramsContainer2,
                             &tmp3DContainer);
 
     const auto inferenceEnd = std::chrono::high_resolution_clock::now();
