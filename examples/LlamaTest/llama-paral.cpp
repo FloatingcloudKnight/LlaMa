@@ -948,11 +948,6 @@ int main() {
     // Execute the forward pass of the model.
     _mlir_ciface_forward0(resultContainerPtr, &paramsContainer0,
                           &inputContainer);
-
-    // resultContainerPtr->memRef3D0.splitMemRef(
-    //     std::move(resultContainerPtr->memRef3D0), subResultContainer[0],
-    //     subResultContainer[1], subResultContainer[2], subResultContainer[3],
-    //     1, 10);
     _mlir_ciface_forward196(subResultContainer, &resultContainerPtr->memRef3D0);
     {
       std::lock_guard<std::mutex> lock(mutex);
