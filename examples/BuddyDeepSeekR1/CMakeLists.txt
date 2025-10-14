@@ -1,5 +1,5 @@
 # Define bufferize options as variables to avoid CMake quote parsing issues
-set(BUFFERIZE_FULL_OPTS "unknown-type-conversion=identity-layout-map function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries")
+set(BUFFERIZE_FULL_OPTS "function-boundary-type-conversion=identity-layout-map bufferize-function-boundaries")
 set(BUFFERIZE_SIMPLE_OPTS "bufferize-function-boundaries")
 set(TOSA_PIPELINE "builtin.module(func.func(tosa-to-linalg-named),func.func(tosa-to-linalg),func.func(tosa-to-tensor),func.func(tosa-to-arith))")
 
