@@ -29,7 +29,7 @@ add_custom_command(
           ${BUDDY_BINARY_DIR}/buddy-opt
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
-            -one-shot-bufferize=${BUFFERIZE_SIMPLE_OPTS}
+            -one-shot-bufferize=${BUFFERIZE_FULL_OPTS}
             -expand-strided-metadata
             -ownership-based-buffer-deallocation
             -buffer-deallocation-simplification
@@ -73,7 +73,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -convert-elementwise-to-linalg
-            -one-shot-bufferize=${BUFFERIZE_SIMPLE_OPTS}
+            -one-shot-bufferize=${BUFFERIZE_FULL_OPTS}
             -expand-strided-metadata
             -ownership-based-buffer-deallocation
             -buffer-deallocation-simplification

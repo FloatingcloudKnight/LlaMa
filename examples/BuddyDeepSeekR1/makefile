@@ -35,10 +35,9 @@ buddy-lenet-lower:
 		-pass-pipeline "builtin.module(func.func(tosa-to-linalg-named, tosa-to-linalg, tosa-to-tensor, tosa-to-arith))" | \
 	${BUDDY_OPT} \
 		-eliminate-empty-tensors \
-		-empty-tensor-to-alloc-tensor \
 		-convert-elementwise-to-linalg \
 		-one-shot-bufferize="bufferize-function-boundaries" \
-		-o ./log1.mlir
+		-o ./log.mlir
 
 buddy-lenet-translate:
 	@${BUDDY_OPT} ./fake-lenet.mlir \
