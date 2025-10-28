@@ -1,12 +1,11 @@
 #ifndef LLAMAAdd_H // 作用：防止llamaAdd.h被重复引用
 #define LLAMAAdd_H
-#include "SharedQueueTemp.h"
 #include "BaseDisModel.h"
+#include "SharedQueueTemp.h"
 #include <any>
 #include <boost/asio.hpp>
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
-#include <chrono>
 #include <cmath>
 #include <condition_variable>
 #include <cstddef>
@@ -17,6 +16,7 @@
 #include <mutex>
 #include <queue>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <variant>
@@ -44,7 +44,7 @@ constexpr size_t HiddenSize1 = 41;
 extern "C" void _mlir_ciface_forward3(MemRef<float, 3> *, MemRef<float, 2> *,
                                       MemRef<float, 3> *);
 
-//--------------------- AddMess (主线程) ---------------------
+//--------------------------------- AddMess -------------------------------
 class AddQueue : public SharedQueueTemp {
 public:
   AddQueue() : SharedQueueTemp({"input", "input0", "input1", "output"}) {}
@@ -126,7 +126,7 @@ public:
         std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
         hdlsSymbol["FirstRMS"] = hdl;
         connections[hdl] = "FirstRMS";
-        std::cout << "已连接到RMSServer" << std::endl;
+        // std::cout << "已连接到RMSServer" << std::endl;
       });
       websocketpp::lib::error_code rmsec0;
       auto rmscon0 = rmsClient0.get_connection(uri3, rmsec0);
@@ -148,36 +148,34 @@ public:
         resultContainer = sharedQueue.pop<MemRef<float, 3>>("output");
         std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
         if (isLast) {
-          if (tfCount == 31) { 
+          if (tfCount == 31) {
             std::map<std::string, std::vector<std::vector<float>>> sendMap = {
                 {"OutputMess", {resultContainer.getDataVector()}}};
             BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, addServer);
             tfCount = 0;
 
-          } else if (tfCount < 31) { 
+          } else if (tfCount < 31) {
             std::map<std::string, std::vector<std::vector<float>>> sendMap = {
                 {"FirstRMS", {resultContainer.getDataVector()}}};
             BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, addServer);
             tfCount++;
-            } else {
-              std::cout << "transformer层推理次数过多" << std::endl;
-            }
-          } else { 
-            std::map<std::string, std::vector<std::vector<float>>> sendMap = {
-                {"RMSMess", {resultContainer.getDataVector()}}};
-            BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, addServer);
           }
+        } else {
+          std::map<std::string, std::vector<std::vector<float>>> sendMap = {
+              {"RMSMess", {resultContainer.getDataVector()}}};
+          BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, addServer);
         }
-      });
-      if (isLast) {
-        rmsClient0_thread = std::thread([this]() { rmsClient0.run(); });
       }
-      rmsClient_thread.join();
-      mhaClient_thread.join();
-      mhaClient0_thread.join();
-      server_thread.join();
-      output_thread.join();
-      rmsClient0_thread.join();
+    });
+    if (isLast) {
+      rmsClient0_thread = std::thread([this]() { rmsClient0.run(); });
+    }
+    rmsClient_thread.join();
+    mhaClient_thread.join();
+    mhaClient0_thread.join();
+    server_thread.join();
+    output_thread.join();
+    rmsClient0_thread.join();
   }
 
 private:
@@ -205,117 +203,121 @@ private:
 
   void on_server_message(websocketpp::connection_hdl hdl,
                          server::message_ptr msg) {
-      std::string payload = msg->get_payload();
-      if (payload.find("RMSMess") != std::string::npos) {
-        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
-        hdlsSymbol["RMSMess"] = hdl;
-        connections[hdl] = payload;
-        std::cout << payload << " 已连接" << std::endl;
-        return;
-      } else if (payload.find("OutputMess") != std::string::npos) {
-        std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
-        hdlsSymbol[payload] = hdl;
-        connections[hdl] = payload;
-        std::cout << payload << " 已连接" << std::endl;
-        return;
-      }
+    std::string payload = msg->get_payload();
+    if (payload.find("RMSMess") != std::string::npos) {
+      std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+      hdlsSymbol["RMSMess"] = hdl;
+      connections[hdl] = payload;
+      std::cout << payload << " is connected" << std::endl;
+      return;
+    } else if (payload.find("OutputMess") != std::string::npos) {
+      std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
+      hdlsSymbol[payload] = hdl;
+      connections[hdl] = payload;
+      std::cout << payload << " is connected" << std::endl;
+      return;
+    }
   }
 
   std::vector<float> getFloatData(client::message_ptr msg) {
-      if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
-        std::cout << "忽略非二进制消息" << std::endl;
-        return {};
-      }
+    if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
+      // std::cout << "忽略非二进制消息" << std::endl;
+      throw std::runtime_error(
+          "[Error] Invalid data type. Expected binary message.");
+      return {};
+    }
 
-      const std::string &payload = msg->get_payload();
-      if (payload.size() < 10) {
-        std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
-        return {};
-      }
+    const std::string &payload = msg->get_payload();
+    if (payload.size() < 10) {
+      // std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      throw std::runtime_error(
+          "[Error] Protocol header is incomplete (requires at least 10 bytes).");
+      return {};
+    }
 
-      // 解析协议头
-      uint32_t batch_id;
-      uint8_t totalChunks, seqChunk;
-      uint32_t num_elements;
+    // 解析协议头
+    uint32_t batch_id;
+    uint8_t totalChunks, seqChunk;
+    uint32_t num_elements;
 
-      memcpy(&batch_id, payload.data(), 4);
-      totalChunks = payload[4];
-      seqChunk = payload[5];
-      memcpy(&num_elements, payload.data() + 6, 4);
+    memcpy(&batch_id, payload.data(), 4);
+    totalChunks = payload[4];
+    seqChunk = payload[5];
+    memcpy(&num_elements, payload.data() + 6, 4);
 
-      // 验证分块序号有效性
-      if (seqChunk >= totalChunks) {
-        std::cerr << "错误：非法分块序号 " << (int)seqChunk
-                  << " (总块数=" << (int)totalChunks << ")" << std::endl;
-        return {};
-      }
+    // 验证分块序号有效性
+    if (seqChunk >= totalChunks) {
+      std::cerr << "[Error] Invalid chunk sequence number: " << (int)seqChunk
+                << ", Total chunks=" << (int)totalChunks << "." << std::endl;
+      return {};
+    }
 
-      // 验证数据长度
-      const size_t expectedSize = 10 + num_elements * sizeof(float);
-      if (payload.size() != expectedSize) {
-        std::cerr << "错误：数据长度不匹配(预期=" << expectedSize
-                  << " 实际=" << payload.size() << ")" << std::endl;
-        return {};
-      }
+    // 验证数据长度
+    const size_t expectedSize = 10 + num_elements * sizeof(float);
+    if (payload.size() != expectedSize) {
+      std::cerr << "[Error] Data length mismatch. (Expected=" << expectedSize
+                << ", Actual=" << payload.size() << ".)" << std::endl;
+      return {};
+    }
 
-      // 提取浮点数据
-      const float *float_data =
-          reinterpret_cast<const float *>(payload.data() + 10);
-      std::vector<float> chunk(float_data, float_data + num_elements);
-      return chunk;
+    // 提取浮点数据
+    const float *float_data =
+        reinterpret_cast<const float *>(payload.data() + 10);
+    std::vector<float> chunk(float_data, float_data + num_elements);
+    return chunk;
   }
 
   void on_mhaClient_message(websocketpp::connection_hdl hdl,
                             client::message_ptr msg) {
-      std::lock_guard<std::mutex> lock(dataMutex);
-      auto chunk = getFloatData(msg);
-      intptr_t sizes[2] = {SubMaxTokenLength, HiddenSize};
-      MemRef<float, 2> subResultContainer(chunk.data(), sizes);
-      sharedQueue.push("input0", subResultContainer);
-      std::cout << "接收到MHAMess0数据" << std::endl;
+    std::lock_guard<std::mutex> lock(dataMutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[2] = {SubMaxTokenLength, HiddenSize};
+    MemRef<float, 2> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push("input0", subResultContainer);
+    // std::cout << "接收到MHAMess0数据" << std::endl;
   }
 
   void on_mhaClient0_message(websocketpp::connection_hdl hdl,
                              client::message_ptr msg) {
-      std::lock_guard<std::mutex> lock(dataMutex);
-      auto chunk = getFloatData(msg);
-      intptr_t sizes[2] = {SubMaxTokenLength, HiddenSize};
-      MemRef<float, 2> subResultContainer(chunk.data(), sizes);
-      sharedQueue.push("input1", subResultContainer);
-      std::cout << "接收到MHAMess1数据" << std::endl;
+    std::lock_guard<std::mutex> lock(dataMutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[2] = {SubMaxTokenLength, HiddenSize};
+    MemRef<float, 2> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push("input1", subResultContainer);
+    // std::cout << "接收到MHAMess1数据" << std::endl;
   }
 
   void on_rmsClient_message(websocketpp::connection_hdl hdl,
                             client::message_ptr msg) {
-      std::lock_guard<std::mutex> lock(dataMutex);
-      auto chunk = getFloatData(msg);
-      intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
-      MemRef<float, 3> subResultContainer(chunk.data(), sizes);
-      sharedQueue.push<MemRef<float, 3>>("input", subResultContainer);
-      std::cout << "接收到RMSMess数据" << std::endl;
+    std::lock_guard<std::mutex> lock(dataMutex);
+    auto chunk = getFloatData(msg);
+    intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
+    MemRef<float, 3> subResultContainer(chunk.data(), sizes);
+    sharedQueue.push<MemRef<float, 3>>("input", subResultContainer);
+    // std::cout << "接收到RMSMess数据" << std::endl;
   }
-  };
+};
 
-  //--------------------- Comp (子线程) ---------------------
-  class Comp {
-  public:
-    Comp(AddQueue &queue) : sharedQueue(queue) {}
+//--------------------- Comp (子线程) ---------------------
+class Comp {
+public:
+  Comp(AddQueue &queue) : sharedQueue(queue) {}
 
-    void run() {
-      while (true) {
-        auto input1 = sharedQueue.pop<MemRef<float, 2>>("input1");
-        auto input2 = sharedQueue.pop<MemRef<float, 3>>("input");
-        auto input0 = sharedQueue.pop<MemRef<float, 2>>("input0");
-        input0.addMemRef(input0, input1);
-        MemRef<float, 3> resultContainer({1, SubMaxTokenLength, HiddenSize});
-        _mlir_ciface_forward3(&resultContainer, &input0, &input2);
-        std::cout << "forward3 computed." << std::endl;
-        sharedQueue.push("output", resultContainer);
-      }
+  void run() {
+    while (true) {
+      auto input1 = sharedQueue.pop<MemRef<float, 2>>("input1");
+      auto input2 = sharedQueue.pop<MemRef<float, 3>>("input");
+      auto input0 = sharedQueue.pop<MemRef<float, 2>>("input0");
+      input0.addMemRef(input0, input1);
+      MemRef<float, 3> resultContainer({1, SubMaxTokenLength, HiddenSize});
+      _mlir_ciface_forward3(&resultContainer, &input0, &input2);
+      // std::cout << "forward3 computed." << std::endl;
+      sharedQueue.push("output", resultContainer);
     }
+  }
 
-  private:
-    AddQueue &sharedQueue;
-  };
+private:
+  AddQueue &sharedQueue;
+};
 
 #endif // LLAMAAdd_H

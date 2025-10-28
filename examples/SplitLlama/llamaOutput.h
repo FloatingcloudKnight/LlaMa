@@ -21,6 +21,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <stdexcept>
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
@@ -127,10 +128,10 @@ public:
         } else if (currentToken < (MaxTokenLength - tokenCnt)) {
           inputClient.send(inputHdl, std::to_string(generate),
                            websocketpp::frame::opcode::text);
-          std::cout << "第" << currentToken << "次Token推理完成." << std::endl;
-        } else {
-          std::cout << "Transformer层计算次数过多, 当前次数为: " << currentToken
-                    << std::endl;
+          const auto inferenceEnd = std::chrono::high_resolution_clock::now();
+          const std::chrono::duration<double, std::milli> inferenceTime =
+              inferenceEnd - inferenceStart;
+          std::cout << "Token " << currentToken << " : " << inferenceTime.count() / 1000 << "s" << std::endl;
         }
       }
     });
@@ -158,16 +159,21 @@ private:
   /// Define directories of vacabulary and file.
   std::string llamaDir = LLAMA_SPLIT_EXAMPLE_PATH;
   const std::string vocabDir = llamaDir + "/vocab.txt";
+  std::chrono::high_resolution_clock::time_point inferenceStart;
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
-      std::cout << "忽略非二进制消息" << std::endl;
+      // std::cout << "忽略非二进制消息" << std::endl;
+      throw std::runtime_error(
+          "[Error] Invalid data type. Expected binary message.");
       return {};
     }
 
     const std::string &payload = msg->get_payload();
     if (payload.size() < 10) {
-      std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      // std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      throw std::runtime_error(
+          "[Error] Protocol header is incomplete (requires at least 10 bytes).");
       return {};
     }
 
@@ -183,16 +189,16 @@ private:
 
     // 验证分块序号有效性
     if (seqChunk >= totalChunks) {
-      std::cerr << "错误：非法分块序号 " << (int)seqChunk
-                << " (总块数=" << (int)totalChunks << ")" << std::endl;
+      std::cerr << "[Error] Invalid chunk sequence number: " << (int)seqChunk
+                << ", Total chunks=" << (int)totalChunks << "." << std::endl;
       return {};
     }
 
     // 验证数据长度
     const size_t expectedSize = 10 + num_elements * sizeof(float);
     if (payload.size() != expectedSize) {
-      std::cerr << "错误：数据长度不匹配(预期=" << expectedSize
-                << " 实际=" << payload.size() << ")" << std::endl;
+      std::cerr << "[Error] Data length mismatch. (Expected=" << expectedSize
+                << ", Actual=" << payload.size() << ".)" << std::endl;
       return {};
     }
 
@@ -210,7 +216,7 @@ private:
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
     sharedQueue.push("input", subResultContainer);
-    std::cout << "接收到AddMess0数据" << std::endl;
+    // std::cout << "接收到AddMess0数据" << std::endl;
   }
 
   void on_addClient0_message(websocketpp::connection_hdl hdl,
@@ -220,7 +226,7 @@ private:
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
     sharedQueue.push("input0", subResultContainer);
-    std::cout << "接收到AddMess1数据" << std::endl;
+    // std::cout << "接收到AddMess1数据" << std::endl;
   }
 
   void on_inputClient_message(websocketpp::connection_hdl hdl,
@@ -228,10 +234,11 @@ private:
     std::string payload = msg->get_payload();
     try {
       if (payload.empty())
-        throw std::invalid_argument("空输入");
+        throw std::invalid_argument("Empty input.");
       tokenCnt = std::stoi(payload);
+      inferenceStart = std::chrono::high_resolution_clock::now();
     } catch (const std::exception &e) {
-      std::cout << "无效输入: " << payload << " (" << e.what() << ")"
+      std::cout << "Invalid input: " << payload << " (" << e.what() << ")"
                 << std::endl;
     }
   }
@@ -250,7 +257,7 @@ public:
       MemRef<float, 3> resultContainer({1, MaxTokenLength, HiddenSize});
       input0.concatenateMemRefs(addInput, addInput0, input0, 1);
       _mlir_ciface_forward193(&resultContainer, &paramsContainer, &input0);
-      std::cout << "forward193 computed." << std::endl;
+      // std::cout << "forward193 computed." << std::endl;
       sharedQueue.push("output", resultContainer);
     }
   }

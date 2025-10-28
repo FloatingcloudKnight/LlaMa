@@ -143,7 +143,6 @@ public:
 
     auto con = server.get_con_from_hdl(hdl);
     if (!con || con->get_state() != websocketpp::session::state::open) {
-      std::cerr << "连接已关闭，无法发送数据。" << std::endl;
       return;
     }
 
@@ -178,17 +177,17 @@ public:
     for (const auto &[name, dataVecs] : nameToDataVecs) {
       auto it = hdlMap.find(name);
       if (it == hdlMap.end()) {
-        std::cerr << "[Warning] 未找到连接: " << name << std::endl;
+        std::cerr << "[Error] " << name << " not connected." << std::endl;
         continue;
       }
       websocketpp::connection_hdl hdl = it->second;
 
       try {
         send_data(hdl, dataId++, dataVecs, server);
-        std::cout << "成功向" << name << "发送数据" << std::endl;
+        // std::cout << "成功向" << name << "发送数据" << std::endl;
 
       } catch (const websocketpp::exception &e) {
-        std::cerr << "[Error] 向 " << name << " 发送失败: " << e.what()
+        std::cerr << "[Error] Failed to send to" << name << ": " << e.what()
                   << std::endl;
       }
     }
@@ -198,7 +197,7 @@ public:
     std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/log.txt";
     std::ofstream file(logDir, std::ios::app);
     if (!file.is_open()) {
-      std::cerr << "无法打开文件: " << logDir << std::endl;
+      std::cerr << "[Error] Unable to open the file: " << logDir << std::endl;
       return;
     }
 
@@ -213,7 +212,7 @@ public:
     std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/" + filename;
     std::ofstream file(logDir, std::ios::app);
     if (!file.is_open()) {
-      std::cerr << "无法打开文件: " << logDir << std::endl;
+      std::cerr << "[Error] Unable to open the file: " << logDir << std::endl;
       return;
     }
 

@@ -21,6 +21,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <stdexcept>
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
@@ -189,13 +190,17 @@ private:
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
-      std::cout << "忽略非二进制消息" << std::endl;
+      // std::cout << "忽略非二进制消息" << std::endl;
+      throw std::runtime_error(
+          "[Error] Invalid data type. Expected binary message.");
       return {};
     }
 
     const std::string &payload = msg->get_payload();
     if (payload.size() < 10) {
-      std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      // std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      throw std::runtime_error(
+          "[Error] Protocol header is incomplete (requires at least 10 bytes).");
       return {};
     }
 
@@ -214,16 +219,16 @@ private:
 
     // 验证分块序号有效性
     if (currentSequence >= totalChunks) {
-      std::cerr << "错误：非法分块序号 " << (int)currentSequence
-                << " (总块数=" << (int)totalChunks << ")" << std::endl;
+      std::cerr << "[Error] Invalid chunk sequence number: " << (int)seqChunk
+                << ", Total chunks=" << (int)totalChunks << "." << std::endl;
       return {};
     }
 
     // 验证数据长度
     const size_t expectedSize = 10 + num_elements * sizeof(float);
     if (payload.size() != expectedSize) {
-      std::cerr << "错误：数据长度不匹配(预期=" << expectedSize
-                << " 实际=" << payload.size() << ")" << std::endl;
+      std::cerr << "[Error] Data length mismatch. (Expected=" << expectedSize
+                << ", Actual=" << payload.size() << ".)" << std::endl;
       return {};
     }
 
@@ -241,7 +246,7 @@ private:
       std::lock_guard<std::mutex> lock(symbolMutex);
       hdlsSymbol[payload] = hdl;
       connections[hdl] = payload;
-      std::cout << payload << " 已连接" << std::endl;
+      std::cout << payload << " is connected" << std::endl;
       return;
     }
   }
@@ -253,7 +258,7 @@ private:
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
     sharedQueue.push("input0", subResultContainer);
-    std::cout << "接收到RMSMess数据" << std::endl;
+    // std::cout << "接收到RMSMess数据" << std::endl;
   }
 
   void on_rmsClient0_message(websocketpp::connection_hdl,
@@ -263,7 +268,7 @@ private:
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
     sharedQueue.push("input1", subResultContainer);
-    std::cout << "接收到RMSMess数据" << std::endl;
+    // std::cout << "接收到RMSMess数据" << std::endl;
   }
 
   void on_inputClient_message(websocketpp::connection_hdl,
@@ -281,7 +286,7 @@ private:
       MemRef<float, 3> subResultContainer(chunk.data(), inputSizes[sequence]);
       sharedQueue.push("input", subResultContainer);
     }
-    std::cout << "接收到InputMess数据" << std::endl;
+    // std::cout << "接收到InputMess数据" << std::endl;
   }
 };
 
@@ -298,9 +303,8 @@ public:
 
   void run() {
     while (true) {
-      // 非阻塞检查是否有新输入
       if (!index) {
-        updateParams(); // 原子更新三个参数
+        updateParams();
       }
       std::lock_guard<std::mutex> lock(inputMutex);
       MemRef<float, 3> rmsInput0 = sharedQueue.pop<MemRef<float, 3>>("input0");
@@ -310,7 +314,7 @@ public:
       MemRef<float, 2> resultContainer({MaxTokenLength, HiddenSize});
       _mlir_ciface_forward2(&resultContainer, &paramsContainers[index], &input0,
                             &currentInput2, &currentInput3, &currentInput1);
-      std::cout << "第" << index << "次forward2 computed." << std::endl;
+      // std::cout << "第" << index << "次forward2 computed." << std::endl;
       sharedQueue.push("output", resultContainer);
       index = (index + 1) % 32;
     }
@@ -360,7 +364,7 @@ private:
     currentInput1 = sharedQueue.pop<MemRef<float, 2>>("input");
     currentInput2 = sharedQueue.pop<MemRef<float, 3>>("input");
     currentInput3 = sharedQueue.pop<MemRef<float, 3>>("input");
-    std::cout << "额外参数已更新" << std::endl;
+    // std::cout << "额外参数已更新" << std::endl;
   }
 };
 

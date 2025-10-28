@@ -21,6 +21,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <stdexcept>
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
@@ -150,13 +151,17 @@ private:
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
-      std::cout << "忽略非二进制消息" << std::endl;
+      // std::cout << "忽略非二进制消息" << std::endl;
+      throw std::runtime_error(
+          "[Error] Invalid data type. Expected binary message.");
       return {};
     }
 
     const std::string &payload = msg->get_payload();
     if (payload.size() < 10) {
-      std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      // std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      throw std::runtime_error(
+          "[Error] Protocol header is incomplete (requires at least 10 bytes).");
       return {};
     }
 
@@ -172,16 +177,16 @@ private:
 
     // 验证分块序号有效性
     if (seqChunk >= totalChunks) {
-      std::cerr << "错误：非法分块序号 " << (int)seqChunk
-                << " (总块数=" << (int)totalChunks << ")" << std::endl;
+      std::cerr << "[Error] Invalid chunk sequence number: " << (int)seqChunk
+                << ", Total chunks=" << (int)totalChunks << "." << std::endl;
       return {};
     }
 
     // 验证数据长度
     const size_t expectedSize = 10 + num_elements * sizeof(float);
     if (payload.size() != expectedSize) {
-      std::cerr << "错误：数据长度不匹配(预期=" << expectedSize
-                << " 实际=" << payload.size() << ")" << std::endl;
+      std::cerr << "[Error] Data length mismatch. (Expected=" << expectedSize
+                << ", Actual=" << payload.size() << ".)" << std::endl;
       return {};
     }
 
@@ -200,17 +205,17 @@ private:
         std::lock_guard<std::mutex> lock(symbolMutex);
         hdlsSymbol["AddMess"] = hdl;
         connections[hdl] = payload;
-        std::cout << payload << "已连接" << std::endl;
+        // std::cout << payload << "已连接" << std::endl;
       } else if (payload.find("MHAMess") != std::string::npos ||
                  payload.find("MLPMess") != std::string::npos) {
         std::lock_guard<std::mutex> lock(symbolMutex);
         hdlsSymbol[payload] = hdl;
         connections[hdl] = payload;
-        std::cout << payload << "已连接" << std::endl;
+        // std::cout << payload << "已连接" << std::endl;
       } else if (payload.find("LastAdd") != std::string::npos) {
         std::lock_guard<std::mutex> lock(symbolMutex);
         connections[hdl] = payload;
-        std::cout << payload << "已连接" << std::endl;
+        // std::cout << payload << "已连接" << std::endl;
       }
       return;
     }
@@ -220,7 +225,7 @@ private:
       intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
       MemRef<float, 3> subResultContainer(chunk.data(), sizes);
 
-      std::cout << "接收到AddMess数据" << std::endl;
+      // std::cout << "接收到AddMess数据" << std::endl;
       {
         std::lock_guard<std::mutex> lockMutex(symbolMutex); // 加锁保护符号表
         std::map<std::string, std::vector<std::vector<float>>> sendMap = {
@@ -237,7 +242,7 @@ private:
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
 
-    std::cout << "接收到InputMess数据" << std::endl;
+    // std::cout << "接收到InputMess数据" << std::endl;
     {
       std::lock_guard<std::mutex> lockMutex(symbolMutex); // 加锁保护符号表
       std::map<std::string, std::vector<std::vector<float>>> sendMap = {
@@ -262,7 +267,7 @@ public:
       auto input = queue.pop<MemRef<float, 3>>("input");
       MemRef<float, 3> resultContainer({1, SubMaxTokenLength, HiddenSize});
       _mlir_ciface_forward1(&resultContainer, &paramsContainers[index], &input);
-      std::cout << "第" << index << "次forward1 computed." << std::endl;
+      // std::cout << "第" << index << "次forward1 computed." << std::endl;
       queue.push<MemRef<float, 3>>("output", resultContainer);
       index = (index + 1) % 32;
     }

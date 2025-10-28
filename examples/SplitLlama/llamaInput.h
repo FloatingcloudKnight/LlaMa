@@ -34,6 +34,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <stdexcept>
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
@@ -180,12 +181,12 @@ private:
       std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
       hdlsSymbol[payload] = hdl;
       connections[hdl] = payload;
-      std::cout << payload << " 已连接" << std::endl;
+      std::cout << payload << " is connected" << std::endl;
     } else if (payload == "OutputMess") {
       std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
       hdlsSymbol[payload] = hdl;
       connections[hdl] = payload;
-      std::cout << payload << " 已连接" << std::endl;
+      std::cout << payload << " is connected" << std::endl;
 
       // 获取用户输入
       std::string inputStr;
@@ -219,7 +220,7 @@ public:
       auto input = shared_queue.pop<Text<size_t, 2>>("input");
       _mlir_ciface_forward0(resultContainerPtr, &paramsContainer, &input);
       shared_queue.push("output", resultContainerPtr);
-      std::cout << "forward0 computed." << std::endl;
+      // std::cout << "forward0 computed." << std::endl;
     }
   }
 

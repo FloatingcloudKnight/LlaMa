@@ -21,6 +21,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <stdexcept>
 #include <websocketpp/client.hpp>
 #include <websocketpp/config/asio_no_tls.hpp>
 #include <websocketpp/server.hpp>
@@ -70,7 +71,7 @@ public:
         std::string user_id = it->second;
         hdlsSymbol.erase(user_id);
         connections.erase(hdl);
-        std::cout << user_id << " 已断开连接" << std::endl;
+        // std::cout << user_id << " 已断开连接" << std::endl;
       }
     });
 
@@ -176,20 +177,24 @@ private:
       std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
       hdlsSymbol[payload] = hdl;
       connections[hdl] = payload;
-      std::cout << payload << " 已连接" << std::endl;
+      std::cout << payload << " is connected" << std::endl;
       return;
     }
   }
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {
-      std::cout << "忽略非二进制消息" << std::endl;
+      // std::cout << "忽略非二进制消息" << std::endl;
+      throw std::runtime_error(
+          "[Error] Invalid data type. Expected binary message.");
       return {};
     }
 
     const std::string &payload = msg->get_payload();
     if (payload.size() < 10) {
-      std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      // std::cerr << "错误: 协议头不完整(需要至少10字节)" << std::endl;
+      throw std::runtime_error(
+          "[Error] Protocol header is incomplete (requires at least 10 bytes).");
       return {};
     }
 
@@ -205,16 +210,16 @@ private:
 
     // 验证分块序号有效性
     if (seqChunk >= totalChunks) {
-      std::cerr << "错误：非法分块序号 " << (int)seqChunk
-                << " (总块数=" << (int)totalChunks << ")" << std::endl;
+      std::cerr << "[Error] Invalid chunk sequence number: " << (int)seqChunk
+                << ", Total chunks=" << (int)totalChunks << "." << std::endl;
       return {};
     }
 
     // 验证数据长度
     const size_t expectedSize = 10 + num_elements * sizeof(float);
     if (payload.size() != expectedSize) {
-      std::cerr << "错误：数据长度不匹配(预期=" << expectedSize
-                << " 实际=" << payload.size() << ")" << std::endl;
+      std::cerr << "[Error] Data length mismatch. (Expected=" << expectedSize
+                << ", Actual=" << payload.size() << ".)" << std::endl;
       return {};
     }
 
@@ -232,7 +237,7 @@ private:
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
     sharedQueue.push("input0", subResultContainer);
-    std::cout << "接收到RMSMess0数据." << std::endl;
+    // std::cout << "接收到RMSMess0数据." << std::endl;
   }
 
   void on_rmsClient0_message(websocketpp::connection_hdl,
@@ -242,7 +247,7 @@ private:
     intptr_t sizes[3] = {1, SubMaxTokenLength, HiddenSize};
     MemRef<float, 3> subResultContainer(chunk.data(), sizes);
     sharedQueue.push("input1", subResultContainer);
-    std::cout << "接收到RMSMess1数据." << std::endl;
+    // std::cout << "接收到RMSMess1数据." << std::endl;
   }
 };
 
@@ -265,7 +270,7 @@ public:
       input0.concatenateMemRefs(rmsInput0, rmsInput1, input0, 1);
       _mlir_ciface_forward5(&resultContainer, &paramsContainers[index],
                             &input0);
-      std::cout << "第" << index << "次forward5 computed." << std::endl;
+      // std::cout << "第" << index << "次forward5 computed." << std::endl;
       sharedQueue.push("output", resultContainer);
       index = (index + 1) % 32;
     }
