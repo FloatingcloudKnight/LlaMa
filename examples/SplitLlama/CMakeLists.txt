@@ -25,7 +25,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -75,7 +75,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -117,7 +117,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -167,7 +167,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -209,7 +209,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -259,7 +259,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -301,7 +301,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -351,7 +351,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -393,7 +393,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -443,7 +443,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -485,7 +485,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -535,7 +535,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-parallel-vectorization-optimize
+            -matmul-vectorization
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion

@@ -205,17 +205,17 @@ private:
         std::lock_guard<std::mutex> lock(symbolMutex);
         hdlsSymbol["AddMess"] = hdl;
         connections[hdl] = payload;
-        // std::cout << payload << "已连接" << std::endl;
+        std::cout << payload << " is connected" << std::endl;
       } else if (payload.find("MHAMess") != std::string::npos ||
                  payload.find("MLPMess") != std::string::npos) {
         std::lock_guard<std::mutex> lock(symbolMutex);
         hdlsSymbol[payload] = hdl;
         connections[hdl] = payload;
-        // std::cout << payload << "已连接" << std::endl;
+        std::cout << payload << " is connected" << std::endl;
       } else if (payload.find("LastAdd") != std::string::npos) {
         std::lock_guard<std::mutex> lock(symbolMutex);
         connections[hdl] = payload;
-        // std::cout << payload << "已连接" << std::endl;
+        std::cout << payload << " is connected" << std::endl;
       }
       return;
     }
