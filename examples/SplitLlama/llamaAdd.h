@@ -85,7 +85,7 @@ public:
     rmsClient.clear_access_channels(websocketpp::log::alevel::all);
     rmsClient.init_asio();
     rmsClient.set_open_handler([this, name](websocketpp::connection_hdl hdl) {
-      mhaClient.send(hdl, name, websocketpp::frame::opcode::text);
+      rmsClient.send(hdl, name, websocketpp::frame::opcode::text);
     });
     rmsClient.set_message_handler(
         bind(&AddMess::on_rmsClient_message, this, _1, _2));

@@ -228,6 +228,8 @@ private:
       // std::cout << "接收到AddMess数据" << std::endl;
       {
         std::lock_guard<std::mutex> lockMutex(symbolMutex); // 加锁保护符号表
+        rmsServer.send(hdl, "start",
+                       websocketpp::frame::opcode::text);
         std::map<std::string, std::vector<std::vector<float>>> sendMap = {
             {"AddMess", {subResultContainer.getDataVector()}}};
         BaseDisModel::sendToClient(sendMap, hdlsSymbol, dataId, rmsServer);

@@ -193,16 +193,23 @@ public:
     }
   }
 
-  static void printLog(const uint16_t &port, const std::string &info) {
-    std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/log.txt";
+  static void printLog(const std::vector<float> &vec,
+                                 const std::string &filename) {
+    std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/" + filename + ".txt";
     std::ofstream file(logDir, std::ios::app);
     if (!file.is_open()) {
       std::cerr << "[Error] Unable to open the file: " << logDir << std::endl;
       return;
     }
-
-    file << "[Log] port:" << port << '\n';
-    file << "info: " << info << '\n';
+    // 设置输出格式（固定小数点，保留6位小数）
+    file << "[";
+    file << std::fixed << std::setprecision(6);
+    for (size_t i = 0; i < vec.size(); ++i) {
+      file << vec[i];
+      if (i < vec.size() - 1)
+        file << " ";
+    }
+    file << "]" << '\n';
     file.close();
   }
 
