@@ -124,6 +124,10 @@ class Op:
         return self._arguments
 
     @property
+    def parents(self):
+        return self._parents
+
+    @property
     def kwargs(self):
         return self._keyword_arguments
 
@@ -148,6 +152,7 @@ class PlaceholderOp(Op):
     def __init__(self) -> None:
         super().__init__()
         self._op_type = OpType.PlaceholderType
+        self._newshape: list = None
 
 
 class MatmulOp(Op):
@@ -190,7 +195,7 @@ class ViewOp(Op):
     def __init__(self) -> None:
         super().__init__()
         self._op_type = OpType.ReshapeType
-
+        self._newshape: list = None
 
 class EmbeddingOp(Op):
     def __init__(self) -> None:
@@ -376,6 +381,7 @@ class ReshapeOp(Op):
     def __init__(self) -> None:
         super().__init__()
         self._op_type = OpType.ReshapeType
+        self._newshape: list = None
 
 
 class SelectOp(Op):

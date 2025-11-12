@@ -23,6 +23,7 @@ from types import FunctionType
 import ctypes
 import functools
 import numpy as np
+import torch
 
 import mlir.ir as ir
 import mlir.dialects.func as func
@@ -123,6 +124,7 @@ class Graph:
         """
         self._body = []
         self._inputs = inputs
+        self._outputs = None
         self.node_table: Dict[str, Op] = {}
         self._fake_params = fake_params
         self.device = device
@@ -237,21 +239,6 @@ class Graph:
         self.node_table.pop(node.name)
         self.node_table[newnode.name] = newnode
 
-    def init_op_group(self):
-        """
-        Initializes operation groups within the graph.
-
-        Returns:
-        - None
-        """
-        for i, op in enumerate(self._body):
-            if isinstance(op, PlaceholderOp) or isinstance(op, OutputOp):
-                continue
-            group = [op]
-            subgraph_name = "subgraph{}".format(i)
-            self.group_map_device[subgraph_name] = DeviceType.CPU
-            self.op_groups[subgraph_name] = group
-
     def fuse_ops(self, pattern_list: List[FunctionType]):
         """
         Fuse operations in the graph based on provided fusion patterns.
@@ -315,6 +302,7 @@ class Graph:
             )
             self._imported_module = fx_importer.import_graph()
             outputs = fx_importer.get_output_nodes()
+            self._outputs = outputs
         self._output_memref = []
         output_ranks = []
         output_dtypes = []
@@ -437,6 +425,7 @@ class GraphImporter:
         if ops_registry is None:
             ops_registry = {}
         self._symbol_table = {}
+        self._symbol_table_output = {}
         self._body = body
         self._device = device
         self._func_name = func_name
@@ -582,6 +571,7 @@ class GraphImporter:
         Returns:
             mlir.ir.Module: An MLIR module in high-level dialects.
         """
+        # 创建一个新Module, 根据计算图中的算子添加对应的MLIR操作
         with ir.InsertionPoint(self._module.body):
             arguments = []
             if self._do_param_pack:
@@ -602,10 +592,13 @@ class GraphImporter:
                     extern_func.append(node)
                     self._import_op(node)
 
+            # 将下方的Python函数包装为MLIR中的函数操作（FuncOp）
             @func.FuncOp.from_py_func(*arguments, name=self._func_name)
             def generated_func(*args):
                 args_list = list(args)
+                # 遍历计算图的节点进行针对性处理
                 for node in self._body:
+                    # 外部函数无需处理
                     if node in extern_func:
                         continue
                     if isinstance(node, OutputOp):
@@ -616,8 +609,11 @@ class GraphImporter:
                         ]
                         self._symbol_table[("output", 0)] = returns
                     elif isinstance(node, PlaceholderOp):
+                        if node._newshape is not None:
+                            node.tensor_meta['shape'] = torch.Size(list(node._newshape))
                         self._import_placeholder(node, args_list)
                     elif isinstance(node, GetItemOp):
+                        # print(self._symbol_table)
                         self._symbol_table[(str(node.name), 0)] = (
                             self._symbol_table[
                                 (str(node.args[0]), node.args[1])
@@ -683,24 +679,30 @@ class GraphImporter:
 
         """
         op_name = node.__class__.__name__
+        # 根据算子类型自动调用MLIR操作注册表中的对应函数生成MLIR操作
         op_ret: ir.Operation | ir.Value | tuple | List | ir.OpResult = (
             self._ops_registry[op_name](node, self._symbol_table)
         )
+        # 根据返回值类型将MLIR操作结果添加到符号表中
         if isinstance(op_ret, tuple | List | ir.OpResultList):
             for i, operation in enumerate(op_ret):
                 if isinstance(operation, ir.Operation) or isinstance(
                     operation, ir.OpView
                 ):
                     self._symbol_table[(str(node.name), i)] = operation.result
+                    self._symbol_table_output[(str(node.name), i)] = operation.result
                 elif isinstance(operation, ir.OpResult):
                     self._symbol_table[(str(node.name), i)] = operation
+                    self._symbol_table_output[(str(node.name), i)] = operation
                 else:
                     raise NotImplementedError
         elif isinstance(op_ret, ir.OpResult):
             self._symbol_table[(str(node.name), 0)] = op_ret
+            self._symbol_table_output[(str(node.name), 0)] = op_ret
         else:
             for i, result in enumerate(op_ret.results):
                 self._symbol_table[(str(node.name), i)] = result
+                self._symbol_table_output[(str(node.name), i)] = result
 
     def get_output_nodes(self):
         """

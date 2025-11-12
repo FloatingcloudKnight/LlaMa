@@ -26,7 +26,7 @@ add_custom_command(
             -affine-loop-fusion
             -affine-parallelize
             -lower-affine
-            -convert-scf-to-openmp
+            -convert-scf-to-openmp=num-threads=48
             -convert-vector-to-scf
             -expand-strided-metadata
             -convert-vector-to-llvm
@@ -70,7 +70,7 @@ add_custom_command(
             -affine-loop-fusion
             -affine-parallelize
             -lower-affine
-            -convert-scf-to-openmp
+            -convert-scf-to-openmp=num-threads=48
             -convert-vector-to-scf
             -expand-strided-metadata
             -lower-affine
