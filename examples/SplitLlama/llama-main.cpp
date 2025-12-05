@@ -13,7 +13,7 @@ using namespace buddy;
 
 constexpr size_t MaxVocabSize = 32000;
 constexpr size_t MaxTokenLength = 40;
-constexpr size_t SubMaxTokenLength = 20;
+constexpr size_t SubMaxTokenLength = 10;
 constexpr size_t HiddenSize = 4096;
 constexpr size_t HiddenSize0 = 128;
 constexpr size_t HiddenSize1 = 41;
@@ -123,8 +123,11 @@ int main(int argc, char *argv[]) {
 
   // Common variables needed by all ranks
 
-  int subSize = MaxTokenLength * HiddenSize / 2;
-  MPI_Request send_req[9], recv_req[9];
+  int subSize = SubMaxTokenLength * HiddenSize;
+  int offset0 = subSize;
+  int offset1 = subSize * 2;
+  int offset2 = subSize * 3;
+  MPI_Request send_req[16], recv_req[9];
 
   int rank, size;
   int generateLen = MaxTokenLength;
@@ -171,45 +174,63 @@ int main(int argc, char *argv[]) {
       _mlir_ciface_forward0(inputResultContainerPtr, &paramsContainer0,
                             &inputContainer);
       inputPtr = inputResultContainerPtr->memRef3D0.getData();
-      // if (i == 0){
+
       MPI_Isend(inputPtr, subSize, MPI_FLOAT, 1, 0, MPI_COMM_WORLD,
                 &send_req[0]);
+      MPI_Isend(inputPtr + offset0, subSize, MPI_FLOAT, 2, 0, MPI_COMM_WORLD,
+                &send_req[1]);
+      MPI_Isend(inputPtr + offset1, subSize, MPI_FLOAT, 3, 0, MPI_COMM_WORLD,
+                &send_req[2]);
+      MPI_Isend(inputPtr + offset2, subSize, MPI_FLOAT, 4, 0, MPI_COMM_WORLD,
+                &send_req[3]);
+      
       MPI_Isend(inputResultContainerPtr->memRef2D.getData(),
                 MaxTokenLength * HiddenSize1, MPI_FLOAT, 1, 1, MPI_COMM_WORLD,
-                &send_req[2]);
+                &send_req[4]);
       MPI_Isend(inputResultContainerPtr->memRef3D1.getData(),
                 MaxTokenLength * HiddenSize0, MPI_FLOAT, 1, 2, MPI_COMM_WORLD,
-                &send_req[3]);
+                &send_req[5]);
       MPI_Isend(inputResultContainerPtr->memRef3D2.getData(),
                 MaxTokenLength * HiddenSize0, MPI_FLOAT, 1, 3, MPI_COMM_WORLD,
-                &send_req[4]);
-      MPI_Isend(inputPtr + subSize, subSize, MPI_FLOAT, 2, 0, MPI_COMM_WORLD,
-                &send_req[1]);
+                &send_req[6]);
       MPI_Isend(inputResultContainerPtr->memRef2D.getData(),
                 MaxTokenLength * HiddenSize1, MPI_FLOAT, 2, 1, MPI_COMM_WORLD,
-                &send_req[5]);
+                &send_req[7]);
       MPI_Isend(inputResultContainerPtr->memRef3D1.getData(),
                 MaxTokenLength * HiddenSize0, MPI_FLOAT, 2, 2, MPI_COMM_WORLD,
-                &send_req[6]);
+                &send_req[8]);
       MPI_Isend(inputResultContainerPtr->memRef3D2.getData(),
                 MaxTokenLength * HiddenSize0, MPI_FLOAT, 2, 3, MPI_COMM_WORLD,
-                &send_req[7]);
-      MPI_Waitall(8, send_req, MPI_STATUSES_IGNORE);
-
-      // } else {
-      //   MPI_Isend(inputPtr, subSize, MPI_FLOAT, 1, 0, MPI_COMM_WORLD,
-      //           &send_req[0]);
-      //   MPI_Isend(inputPtr + subSize, subSize, MPI_FLOAT, 2, 0,
-      //   MPI_COMM_WORLD,
-      //           &send_req[1]);
-      //   MPI_Waitall(2, send_req, MPI_STATUSES_IGNORE);
-      // }
+                &send_req[9]);
+      MPI_Isend(inputResultContainerPtr->memRef2D.getData(),
+                MaxTokenLength * HiddenSize1, MPI_FLOAT, 3, 1, MPI_COMM_WORLD,
+                &send_req[10]);
+      MPI_Isend(inputResultContainerPtr->memRef3D1.getData(),
+                MaxTokenLength * HiddenSize0, MPI_FLOAT, 3, 2, MPI_COMM_WORLD,
+                &send_req[11]);
+      MPI_Isend(inputResultContainerPtr->memRef3D2.getData(),
+                MaxTokenLength * HiddenSize0, MPI_FLOAT, 3, 3, MPI_COMM_WORLD,
+                &send_req[12]);
+      MPI_Isend(inputResultContainerPtr->memRef2D.getData(),
+                MaxTokenLength * HiddenSize1, MPI_FLOAT, 4, 1, MPI_COMM_WORLD,
+                &send_req[13]);
+      MPI_Isend(inputResultContainerPtr->memRef3D1.getData(),
+                MaxTokenLength * HiddenSize0, MPI_FLOAT, 4, 2, MPI_COMM_WORLD,
+                &send_req[14]);
+      MPI_Isend(inputResultContainerPtr->memRef3D2.getData(),
+                MaxTokenLength * HiddenSize0, MPI_FLOAT, 4, 3, MPI_COMM_WORLD,
+                &send_req[15]);
+      MPI_Waitall(16, send_req, MPI_STATUSES_IGNORE);
 
       MPI_Irecv(outputPtr, subSize, MPI_FLOAT, 1, 0, MPI_COMM_WORLD,
                 &recv_req[0]);
-      MPI_Irecv(outputPtr + subSize, subSize, MPI_FLOAT, 2, 0, MPI_COMM_WORLD,
+      MPI_Irecv(outputPtr + offset0, subSize, MPI_FLOAT, 2, 0, MPI_COMM_WORLD,
                 &recv_req[1]);
-      MPI_Waitall(2, recv_req, MPI_STATUSES_IGNORE);
+      MPI_Irecv(outputPtr + offset1, subSize, MPI_FLOAT, 3, 0, MPI_COMM_WORLD,
+                &recv_req[2]);
+      MPI_Irecv(outputPtr + offset2, subSize, MPI_FLOAT, 4, 0, MPI_COMM_WORLD,
+                &recv_req[3]);
+      MPI_Waitall(4, recv_req, MPI_STATUSES_IGNORE);
       _mlir_ciface_forward193(&inputResultContainerPtr->memRef3D0,
                               &paramsContainer1, &tmp3DMemRef);
       const auto inferenceEnd = std::chrono::high_resolution_clock::now();
@@ -234,20 +255,18 @@ int main(int argc, char *argv[]) {
       inputContainer.appendTokenIdx(maxIndex);
       outputContainer.appendTokenIdx(maxIndex);
     }
-  } else if (rank == 1 || rank == 2) {
+  } else if (rank == 1) {
     // === RMSNorm ===
-    // Rank 1, 2 specific variables
+    // Rank 1 specific variables
     MemRef<float, 3> subResultContainer({1, SubMaxTokenLength, HiddenSize});
-    MemRef<float, 3> subtmp3DMemRef({1, SubMaxTokenLength, HiddenSize});
     MemRef<float, 3> sub3DContainer({1, SubMaxTokenLength, HiddenSize});
     MemRef<float, 2> mhaMemRef2D({MaxTokenLength, HiddenSize1});
     MemRef<float, 3> mhaMemRef3D1({1, MaxTokenLength, HiddenSize0});
     MemRef<float, 3> mhaMemRef3D2({1, MaxTokenLength, HiddenSize0});
     MemRef<float, 3> tmp3DMemRef({1, MaxTokenLength, HiddenSize});
-    MemRef<float, 2> tmp2DContainer0({MaxTokenLength, HiddenSize});
-    MemRef<float, 2> tmp2DContainer1({MaxTokenLength, HiddenSize});
+    MemRef<float, 2> tmp2DContainer({MaxTokenLength, HiddenSize});
+    MemRef<float, 2> sub2DContainer({SubMaxTokenLength, HiddenSize});
     MemRef<float, 2> sub2DContainer0({SubMaxTokenLength, HiddenSize});
-    MemRef<float, 2> sub2DContainer1({SubMaxTokenLength, HiddenSize});
 
     // Get pointers once to avoid repeated calls
     float *subResultPtr = subResultContainer.getData();
@@ -256,14 +275,13 @@ int main(int argc, char *argv[]) {
     float *mhaMemRef3D1Ptr = mhaMemRef3D1.getData();
     float *mhaMemRef3D2Ptr = mhaMemRef3D2.getData();
     float *mhaPtr = tmp3DMemRef.getData();
-    float *mhaOutputPtr0 = tmp2DContainer0.getData();
-    float *mhaOutputPtr1 = tmp2DContainer1.getData();
-    float *sub2DPtr0 = sub2DContainer0.getData();
-    float *sub2DPtr1 = sub2DContainer1.getData();
+    float *mhaOutputPtr = tmp2DContainer.getData();
+    float *sub2DPtr0 = sub2DContainer.getData();
+    float *sub2DPtr1 = sub2DContainer0.getData();
 
     constexpr size_t paramSizeRMS = 4096;
-    constexpr size_t paramSizeMHA = 33554432;
-    constexpr size_t paramSizeMLP = 67633152;
+    constexpr size_t paramSizeMHA = 16777216;
+    constexpr size_t paramSizeMLP = 33816576;
 
     std::vector<std::string> paramsDirsRMS, paramsDirsRMS0;
     std::vector<std::string> paramsDirsMHA, paramsDirsMLP;
@@ -277,20 +295,11 @@ int main(int argc, char *argv[]) {
                                   std::to_string(i + 3) + "_arg0" + ".data");
     }
     // MHA & MLP
-    if (rank == 1) {
-      for (int i = 2; i < 193; i += 6) {
-        paramsDirsMHA.emplace_back(llamaBuildDir + "/subgraph" +
-                                   std::to_string(i) + "_arg0" + ".data");
-        paramsDirsMLP.emplace_back(llamaBuildDir + "/subgraph" +
-                                   std::to_string(i + 3) + "_arg0" + ".data");
-      }
-    } else {
-      for (int i = 2; i < 193; i += 6) {
-        paramsDirsMHA.emplace_back(llamaBuildDir + "/subgraph" +
-                                   std::to_string(i) + "_arg1" + ".data");
-        paramsDirsMLP.emplace_back(llamaBuildDir + "/subgraph" +
-                                   std::to_string(i + 3) + "_arg1" + ".data");
-      }
+    for (int i = 2; i < 193; i += 6) {
+      paramsDirsMHA.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i) + "_arg0" + ".data");
+      paramsDirsMLP.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i + 3) + "_arg0" + ".data");
     }
 
     // Load parameters after Bcast to avoid blocking rank 2 at MPI_Barrier
@@ -314,21 +323,11 @@ int main(int argc, char *argv[]) {
     }
 
     int source = 0;
-    int dest = 3 - rank;
-    int offset = (rank - 1) * subSize;
-    int destOffset = (dest - 1) * subSize;
+    int dest2 = 2;
+    int dest3 = 3;
+    int dest4 = 4;
 
     for (int i = 0; i < generateLen; i++) {
-      // if (i == 0){
-      //   MPI_Irecv(mhaMemRef2DPtr, MaxTokenLength * HiddenSize1, MPI_FLOAT,
-      //   source,
-      //           1, MPI_COMM_WORLD, &recv_req[0]);
-      //   MPI_Irecv(mhaMemRef3D1Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
-      //             source, 2, MPI_COMM_WORLD, &recv_req[1]);
-      //   MPI_Irecv(mhaMemRef3D2Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
-      //             source, 3, MPI_COMM_WORLD, &recv_req[2]);
-      //   MPI_Waitall(3, recv_req, MPI_STATUSES_IGNORE);
-      // }
       MPI_Irecv(mhaMemRef2DPtr, MaxTokenLength * HiddenSize1, MPI_FLOAT, source,
                 1, MPI_COMM_WORLD, &recv_req[0]);
       MPI_Irecv(mhaMemRef3D1Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
@@ -353,13 +352,20 @@ int main(int argc, char *argv[]) {
         mhaPtr = tmp3DMemRef.getData();
         // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
         // ----- AllGather -----
-        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest, 0, MPI_COMM_WORLD,
-            &send_req[0]);
-        MPI_Irecv(mhaPtr + destOffset, subSize, MPI_FLOAT, dest, 0,
-            MPI_COMM_WORLD, &recv_req[0]);
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset0, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
         for (int idx = 0; idx < subSize; idx++) {
-          mhaPtr[idx+offset] = rmsPtr[idx];
+          mhaPtr[idx] = rmsPtr[idx];
         }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr, offset1, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset1, offset1, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
         MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
         MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
 
@@ -369,24 +375,43 @@ int main(int argc, char *argv[]) {
         // << std::endl;
 
         // ----- MHA -----
-        _mlir_ciface_forward2(&tmp2DContainer0, &paramsContainersMHA[m],
+        _mlir_ciface_forward2(&tmp2DContainer, &paramsContainersMHA[m],
                               &tmp3DMemRef, &mhaMemRef3D1, &mhaMemRef3D2,
                               &mhaMemRef2D);
         // ----- Reduce-Scatter -----
-        mhaOutputPtr0 = tmp2DContainer0.getData();
-        MPI_Isend(mhaOutputPtr0 + destOffset, subSize, MPI_FLOAT, dest, 0, MPI_COMM_WORLD,
-            &send_req[0]);
-        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest, 0, MPI_COMM_WORLD,
-            &recv_req[0]);
+        mhaOutputPtr = tmp2DContainer.getData();
+        MPI_Isend(mhaOutputPtr + offset0, subSize, MPI_FLOAT, dest2, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
         MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
         MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
         
+        MPI_Isend(mhaOutputPtr + offset1, subSize, MPI_FLOAT, dest3, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
         for (int idx = 0; idx < subSize; idx++) {
-          sub2DPtr0[idx] += mhaOutputPtr0[idx+offset];
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
         }
-        
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr + offset2, subSize, MPI_FLOAT, dest4, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+
         // ----- RMS & Add -----
-        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer0,
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
                               &subResultContainer);
         _mlir_ciface_forward1(&sub3DContainer, &paramsContainersRMS0[m],
                               &subResultContainer);
@@ -394,37 +419,732 @@ int main(int argc, char *argv[]) {
         mhaPtr = tmp3DMemRef.getData();
         // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
         // ----- AllGather -----
-        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest, 0, MPI_COMM_WORLD,
-            &send_req[0]);
-        MPI_Irecv(mhaPtr + destOffset, subSize, MPI_FLOAT, dest, 0,
-            MPI_COMM_WORLD, &recv_req[0]);
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset0, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
         for (int idx = 0; idx < subSize; idx++) {
-          mhaPtr[idx+offset] = rmsPtr[idx];
+          mhaPtr[idx] = rmsPtr[idx];
         }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr, offset1, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset1, offset1, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
         MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
         MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
         // ----- MLP -----
-        _mlir_ciface_forward5(&tmp2DContainer0, &paramsContainersMLP[m],
+        _mlir_ciface_forward5(&tmp2DContainer, &paramsContainersMLP[m],
                               &tmp3DMemRef);
         // ----- Reduce-Scatter -----
-        mhaOutputPtr0 = tmp2DContainer0.getData();
-        MPI_Isend(mhaOutputPtr0 + destOffset, subSize, MPI_FLOAT, dest, 0, MPI_COMM_WORLD,
-            &send_req[0]);
-        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest, 0, MPI_COMM_WORLD,
-            &recv_req[0]);
+        mhaOutputPtr = tmp2DContainer.getData();
+        MPI_Isend(mhaOutputPtr + offset0, subSize, MPI_FLOAT, dest2, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        
+        MPI_Isend(mhaOutputPtr + offset1, subSize, MPI_FLOAT, dest3, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr + offset2, subSize, MPI_FLOAT, dest4, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
         MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
         MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
         for (int idx = 0; idx < subSize; idx++) {
-          sub2DPtr0[idx] += mhaOutputPtr0[idx+offset];
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
         }
         // ----- Add -----
-        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer0,
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
                               &subResultContainer);
         if (m == 31) {
           subResultPtr = subResultContainer.getData();
           MPI_Send(subResultPtr, subSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
         }
-        std::cout << "completed " << m << std::endl;
+      }
+    }
+  } else if (rank == 2) {
+    // === RMSNorm ===
+    // Rank 2 specific variables
+    MemRef<float, 3> subResultContainer({1, SubMaxTokenLength, HiddenSize});
+    MemRef<float, 3> sub3DContainer({1, SubMaxTokenLength, HiddenSize});
+    MemRef<float, 2> mhaMemRef2D({MaxTokenLength, HiddenSize1});
+    MemRef<float, 3> mhaMemRef3D1({1, MaxTokenLength, HiddenSize0});
+    MemRef<float, 3> mhaMemRef3D2({1, MaxTokenLength, HiddenSize0});
+    MemRef<float, 3> tmp3DMemRef({1, MaxTokenLength, HiddenSize});
+    MemRef<float, 2> tmp2DContainer({MaxTokenLength, HiddenSize});
+    MemRef<float, 2> sub2DContainer({SubMaxTokenLength, HiddenSize});
+    MemRef<float, 2> sub2DContainer0({SubMaxTokenLength, HiddenSize});
+
+    // Get pointers once to avoid repeated calls
+    float *subResultPtr = subResultContainer.getData();
+    float *rmsPtr = sub3DContainer.getData();
+    float *mhaMemRef2DPtr = mhaMemRef2D.getData();
+    float *mhaMemRef3D1Ptr = mhaMemRef3D1.getData();
+    float *mhaMemRef3D2Ptr = mhaMemRef3D2.getData();
+    float *mhaPtr = tmp3DMemRef.getData();
+    float *mhaOutputPtr = tmp2DContainer.getData();
+    float *sub2DPtr0 = sub2DContainer.getData();
+    float *sub2DPtr1 = sub2DContainer0.getData();
+
+    constexpr size_t paramSizeRMS = 4096;
+    constexpr size_t paramSizeMHA = 16777216;
+    constexpr size_t paramSizeMLP = 33816576;
+
+    std::vector<std::string> paramsDirsRMS, paramsDirsRMS0;
+    std::vector<std::string> paramsDirsMHA, paramsDirsMLP;
+    std::vector<MemRef<float, 1>> paramsContainersRMS, paramsContainersRMS0;
+    std::vector<MemRef<float, 1>> paramsContainersMHA, paramsContainersMLP;
+    // RMS
+    for (int i = 1; i < 193; i += 6) {
+      paramsDirsRMS.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i) + "_arg0" + ".data");
+      paramsDirsRMS0.emplace_back(llamaBuildDir + "/subgraph" +
+                                  std::to_string(i + 3) + "_arg0" + ".data");
+    }
+    // MHA & MLP
+    for (int i = 2; i < 193; i += 6) {
+      paramsDirsMHA.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i) + "_arg1" + ".data");
+      paramsDirsMLP.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i + 3) + "_arg1" + ".data");
+    }
+
+    // Load parameters after Bcast to avoid blocking rank 2 at MPI_Barrier
+    for (int i = 0; i < 32; i++) {
+      // First RMS
+      MemRef<float, 1> paramsContainerRMS({paramSizeRMS});
+      loadParameters(paramsDirsRMS[i], paramsContainerRMS);
+      paramsContainersRMS.push_back(paramsContainerRMS);
+      // MHA
+      MemRef<float, 1> paramsContainerMHA({paramSizeMHA});
+      loadParameters(paramsDirsMHA[i], paramsContainerMHA);
+      paramsContainersMHA.push_back(paramsContainerMHA);
+      // Second RMS
+      MemRef<float, 1> paramsContainerRMS0({paramSizeRMS});
+      loadParameters(paramsDirsRMS0[i], paramsContainerRMS0);
+      paramsContainersRMS0.push_back(paramsContainerRMS0);
+      // MLP
+      MemRef<float, 1> paramsContainerMLP({paramSizeMLP});
+      loadParameters(paramsDirsMLP[i], paramsContainerMLP);
+      paramsContainersMLP.push_back(paramsContainerMLP);
+    }
+
+    int source = 0;
+    int dest1 = 1;
+    int dest3 = 3;
+    int dest4 = 4;
+
+    for (int i = 0; i < generateLen; i++) {
+      MPI_Irecv(mhaMemRef2DPtr, MaxTokenLength * HiddenSize1, MPI_FLOAT, source,
+                1, MPI_COMM_WORLD, &recv_req[0]);
+      MPI_Irecv(mhaMemRef3D1Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
+                source, 2, MPI_COMM_WORLD, &recv_req[1]);
+      MPI_Irecv(mhaMemRef3D2Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
+                source, 3, MPI_COMM_WORLD, &recv_req[2]);
+      MPI_Waitall(3, recv_req, MPI_STATUSES_IGNORE);
+
+      for (int m = 0; m < 32; m++) {
+        if (m == 0) {
+          MPI_Irecv(subResultPtr, subSize, MPI_FLOAT, source, 0, MPI_COMM_WORLD,
+                    &recv_req[0]);
+          MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        }
+
+        // const auto inferenceStart =
+        // std::chrono::high_resolution_clock::now();
+        // ----- RMS -----
+        _mlir_ciface_forward1(&sub3DContainer, &paramsContainersRMS[m],
+                              &subResultContainer);
+        rmsPtr = sub3DContainer.getData();
+        mhaPtr = tmp3DMemRef.getData();
+        // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
+        // ----- AllGather -----
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          mhaPtr[idx+offset0] = rmsPtr[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr, offset1, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset1, offset1, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        // const std::chrono::duration<double, std::milli> inferenceTime =
+        //     inferenceEnd - inferenceStart;
+        // std::cout << "[Log] RMSNorm: " << inferenceTime.count() / 1000 << "s"
+        // << std::endl;
+
+        // ----- MHA -----
+        _mlir_ciface_forward2(&tmp2DContainer, &paramsContainersMHA[m],
+                              &tmp3DMemRef, &mhaMemRef3D1, &mhaMemRef3D2,
+                              &mhaMemRef2D);
+        // ----- Reduce-Scatter -----
+        mhaOutputPtr = tmp2DContainer.getData();
+        MPI_Isend(mhaOutputPtr + offset1, subSize, MPI_FLOAT, dest3, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        
+        MPI_Isend(mhaOutputPtr + offset2, subSize, MPI_FLOAT, dest4, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx+offset0];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+
+        // ----- RMS & Add -----
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
+                              &subResultContainer);
+        _mlir_ciface_forward1(&sub3DContainer, &paramsContainersRMS0[m],
+                              &subResultContainer);
+        rmsPtr = sub3DContainer.getData();
+        mhaPtr = tmp3DMemRef.getData();
+        // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
+        // ----- AllGather -----
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          mhaPtr[idx+offset0] = rmsPtr[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr, offset1, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset1, offset1, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        // ----- MLP -----
+        _mlir_ciface_forward5(&tmp2DContainer, &paramsContainersMLP[m],
+                              &tmp3DMemRef);
+        // ----- Reduce-Scatter -----
+        mhaOutputPtr = tmp2DContainer.getData();
+        MPI_Isend(mhaOutputPtr + offset1, subSize, MPI_FLOAT, dest3, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        
+        MPI_Isend(mhaOutputPtr + offset2, subSize, MPI_FLOAT, dest4, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx+offset0];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+        // ----- Add -----
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
+                              &subResultContainer);
+        if (m == 31) {
+          subResultPtr = subResultContainer.getData();
+          MPI_Send(subResultPtr, subSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+        }
+      }
+    }
+  } else if (rank == 3) {
+    // === RMSNorm ===
+    // Rank 3 specific variables
+    MemRef<float, 3> subResultContainer({1, SubMaxTokenLength, HiddenSize});
+    MemRef<float, 3> sub3DContainer({1, SubMaxTokenLength, HiddenSize});
+    MemRef<float, 2> mhaMemRef2D({MaxTokenLength, HiddenSize1});
+    MemRef<float, 3> mhaMemRef3D1({1, MaxTokenLength, HiddenSize0});
+    MemRef<float, 3> mhaMemRef3D2({1, MaxTokenLength, HiddenSize0});
+    MemRef<float, 3> tmp3DMemRef({1, MaxTokenLength, HiddenSize});
+    MemRef<float, 2> tmp2DContainer({MaxTokenLength, HiddenSize});
+    MemRef<float, 2> sub2DContainer({SubMaxTokenLength, HiddenSize});
+    MemRef<float, 2> sub2DContainer0({SubMaxTokenLength, HiddenSize});
+
+    // Get pointers once to avoid repeated calls
+    float *subResultPtr = subResultContainer.getData();
+    float *rmsPtr = sub3DContainer.getData();
+    float *mhaMemRef2DPtr = mhaMemRef2D.getData();
+    float *mhaMemRef3D1Ptr = mhaMemRef3D1.getData();
+    float *mhaMemRef3D2Ptr = mhaMemRef3D2.getData();
+    float *mhaPtr = tmp3DMemRef.getData();
+    float *mhaOutputPtr = tmp2DContainer.getData();
+    float *sub2DPtr0 = sub2DContainer.getData();
+    float *sub2DPtr1 = sub2DContainer0.getData();
+
+    constexpr size_t paramSizeRMS = 4096;
+    constexpr size_t paramSizeMHA = 16777216;
+    constexpr size_t paramSizeMLP = 33816576;
+
+    std::vector<std::string> paramsDirsRMS, paramsDirsRMS0;
+    std::vector<std::string> paramsDirsMHA, paramsDirsMLP;
+    std::vector<MemRef<float, 1>> paramsContainersRMS, paramsContainersRMS0;
+    std::vector<MemRef<float, 1>> paramsContainersMHA, paramsContainersMLP;
+    // RMS
+    for (int i = 1; i < 193; i += 6) {
+      paramsDirsRMS.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i) + "_arg0" + ".data");
+      paramsDirsRMS0.emplace_back(llamaBuildDir + "/subgraph" +
+                                  std::to_string(i + 3) + "_arg0" + ".data");
+    }
+    // MHA & MLP
+    for (int i = 2; i < 193; i += 6) {
+      paramsDirsMHA.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i) + "_arg2" + ".data");
+      paramsDirsMLP.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i + 3) + "_arg2" + ".data");
+    }
+
+    // Load parameters after Bcast to avoid blocking rank 2 at MPI_Barrier
+    for (int i = 0; i < 32; i++) {
+      // First RMS
+      MemRef<float, 1> paramsContainerRMS({paramSizeRMS});
+      loadParameters(paramsDirsRMS[i], paramsContainerRMS);
+      paramsContainersRMS.push_back(paramsContainerRMS);
+      // MHA
+      MemRef<float, 1> paramsContainerMHA({paramSizeMHA});
+      loadParameters(paramsDirsMHA[i], paramsContainerMHA);
+      paramsContainersMHA.push_back(paramsContainerMHA);
+      // Second RMS
+      MemRef<float, 1> paramsContainerRMS0({paramSizeRMS});
+      loadParameters(paramsDirsRMS0[i], paramsContainerRMS0);
+      paramsContainersRMS0.push_back(paramsContainerRMS0);
+      // MLP
+      MemRef<float, 1> paramsContainerMLP({paramSizeMLP});
+      loadParameters(paramsDirsMLP[i], paramsContainerMLP);
+      paramsContainersMLP.push_back(paramsContainerMLP);
+    }
+
+    int source = 0;
+    int dest1 = 1;
+    int dest2 = 2;
+    int dest4 = 4;
+
+    for (int i = 0; i < generateLen; i++) {
+      MPI_Irecv(mhaMemRef2DPtr, MaxTokenLength * HiddenSize1, MPI_FLOAT, source,
+                1, MPI_COMM_WORLD, &recv_req[0]);
+      MPI_Irecv(mhaMemRef3D1Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
+                source, 2, MPI_COMM_WORLD, &recv_req[1]);
+      MPI_Irecv(mhaMemRef3D2Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
+                source, 3, MPI_COMM_WORLD, &recv_req[2]);
+      MPI_Waitall(3, recv_req, MPI_STATUSES_IGNORE);
+
+      for (int m = 0; m < 32; m++) {
+        if (m == 0) {
+          MPI_Irecv(subResultPtr, subSize, MPI_FLOAT, source, 0, MPI_COMM_WORLD,
+                    &recv_req[0]);
+          MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        }
+
+        // const auto inferenceStart =
+        // std::chrono::high_resolution_clock::now();
+        // ----- RMS -----
+        _mlir_ciface_forward1(&sub3DContainer, &paramsContainersRMS[m],
+                              &subResultContainer);
+        rmsPtr = sub3DContainer.getData();
+        mhaPtr = tmp3DMemRef.getData();
+        // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
+        // ----- AllGather -----
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset2, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          mhaPtr[idx] = rmsPtr[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr + offset1, offset1, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr, offset1, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        // const std::chrono::duration<double, std::milli> inferenceTime =
+        //     inferenceEnd - inferenceStart;
+        // std::cout << "[Log] RMSNorm: " << inferenceTime.count() / 1000 << "s"
+        // << std::endl;
+
+        // ----- MHA -----
+        _mlir_ciface_forward2(&tmp2DContainer, &paramsContainersMHA[m],
+                              &tmp3DMemRef, &mhaMemRef3D1, &mhaMemRef3D2,
+                              &mhaMemRef2D);
+        // ----- Reduce-Scatter -----
+        mhaOutputPtr = tmp2DContainer.getData();
+        MPI_Isend(mhaOutputPtr + offset2, subSize, MPI_FLOAT, dest4, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        
+        MPI_Isend(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx+offset1];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr + offset0, subSize, MPI_FLOAT, dest2, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+
+        // ----- RMS & Add -----
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
+                              &subResultContainer);
+        _mlir_ciface_forward1(&sub3DContainer, &paramsContainersRMS0[m],
+                              &subResultContainer);
+        rmsPtr = sub3DContainer.getData();
+        mhaPtr = tmp3DMemRef.getData();
+        // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
+        // ----- AllGather -----
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset2, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          mhaPtr[idx] = rmsPtr[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr + offset1, offset1, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr, offset1, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        // ----- MLP -----
+        _mlir_ciface_forward5(&tmp2DContainer, &paramsContainersMLP[m],
+                              &tmp3DMemRef);
+        // ----- Reduce-Scatter -----
+        mhaOutputPtr = tmp2DContainer.getData();
+        MPI_Isend(mhaOutputPtr + offset2, subSize, MPI_FLOAT, dest4, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        
+        MPI_Isend(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx+offset1];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr + offset0, subSize, MPI_FLOAT, dest2, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest4, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+        // ----- Add -----
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
+                              &subResultContainer);
+        if (m == 31) {
+          subResultPtr = subResultContainer.getData();
+          MPI_Send(subResultPtr, subSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+        }
+      }
+    }
+  } else if (rank == 4) {
+    // === RMSNorm ===
+    // Rank 4 specific variables
+    MemRef<float, 3> subResultContainer({1, SubMaxTokenLength, HiddenSize});
+    MemRef<float, 3> sub3DContainer({1, SubMaxTokenLength, HiddenSize});
+    MemRef<float, 2> mhaMemRef2D({MaxTokenLength, HiddenSize1});
+    MemRef<float, 3> mhaMemRef3D1({1, MaxTokenLength, HiddenSize0});
+    MemRef<float, 3> mhaMemRef3D2({1, MaxTokenLength, HiddenSize0});
+    MemRef<float, 3> tmp3DMemRef({1, MaxTokenLength, HiddenSize});
+    MemRef<float, 2> tmp2DContainer({MaxTokenLength, HiddenSize});
+    MemRef<float, 2> sub2DContainer({SubMaxTokenLength, HiddenSize});
+    MemRef<float, 2> sub2DContainer0({SubMaxTokenLength, HiddenSize});
+
+    // Get pointers once to avoid repeated calls
+    float *subResultPtr = subResultContainer.getData();
+    float *rmsPtr = sub3DContainer.getData();
+    float *mhaMemRef2DPtr = mhaMemRef2D.getData();
+    float *mhaMemRef3D1Ptr = mhaMemRef3D1.getData();
+    float *mhaMemRef3D2Ptr = mhaMemRef3D2.getData();
+    float *mhaPtr = tmp3DMemRef.getData();
+    float *mhaOutputPtr = tmp2DContainer.getData();
+    float *sub2DPtr0 = sub2DContainer.getData();
+    float *sub2DPtr1 = sub2DContainer0.getData();
+
+    constexpr size_t paramSizeRMS = 4096;
+    constexpr size_t paramSizeMHA = 16777216;
+    constexpr size_t paramSizeMLP = 33816576;
+
+    std::vector<std::string> paramsDirsRMS, paramsDirsRMS0;
+    std::vector<std::string> paramsDirsMHA, paramsDirsMLP;
+    std::vector<MemRef<float, 1>> paramsContainersRMS, paramsContainersRMS0;
+    std::vector<MemRef<float, 1>> paramsContainersMHA, paramsContainersMLP;
+    // RMS
+    for (int i = 1; i < 193; i += 6) {
+      paramsDirsRMS.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i) + "_arg0" + ".data");
+      paramsDirsRMS0.emplace_back(llamaBuildDir + "/subgraph" +
+                                  std::to_string(i + 3) + "_arg0" + ".data");
+    }
+    // MHA & MLP
+    for (int i = 2; i < 193; i += 6) {
+      paramsDirsMHA.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i) + "_arg3" + ".data");
+      paramsDirsMLP.emplace_back(llamaBuildDir + "/subgraph" +
+                                 std::to_string(i + 3) + "_arg3" + ".data");
+    }
+
+    // Load parameters after Bcast to avoid blocking rank 2 at MPI_Barrier
+    for (int i = 0; i < 32; i++) {
+      // First RMS
+      MemRef<float, 1> paramsContainerRMS({paramSizeRMS});
+      loadParameters(paramsDirsRMS[i], paramsContainerRMS);
+      paramsContainersRMS.push_back(paramsContainerRMS);
+      // MHA
+      MemRef<float, 1> paramsContainerMHA({paramSizeMHA});
+      loadParameters(paramsDirsMHA[i], paramsContainerMHA);
+      paramsContainersMHA.push_back(paramsContainerMHA);
+      // Second RMS
+      MemRef<float, 1> paramsContainerRMS0({paramSizeRMS});
+      loadParameters(paramsDirsRMS0[i], paramsContainerRMS0);
+      paramsContainersRMS0.push_back(paramsContainerRMS0);
+      // MLP
+      MemRef<float, 1> paramsContainerMLP({paramSizeMLP});
+      loadParameters(paramsDirsMLP[i], paramsContainerMLP);
+      paramsContainersMLP.push_back(paramsContainerMLP);
+    }
+
+    int source = 0;
+    int dest1 = 1;
+    int dest2 = 2;
+    int dest3 = 3;
+
+    for (int i = 0; i < generateLen; i++) {
+      MPI_Irecv(mhaMemRef2DPtr, MaxTokenLength * HiddenSize1, MPI_FLOAT, source,
+                1, MPI_COMM_WORLD, &recv_req[0]);
+      MPI_Irecv(mhaMemRef3D1Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
+                source, 2, MPI_COMM_WORLD, &recv_req[1]);
+      MPI_Irecv(mhaMemRef3D2Ptr, MaxTokenLength * HiddenSize0, MPI_FLOAT,
+                source, 3, MPI_COMM_WORLD, &recv_req[2]);
+      MPI_Waitall(3, recv_req, MPI_STATUSES_IGNORE);
+
+      for (int m = 0; m < 32; m++) {
+        if (m == 0) {
+          MPI_Irecv(subResultPtr, subSize, MPI_FLOAT, source, 0, MPI_COMM_WORLD,
+                    &recv_req[0]);
+          MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        }
+
+        // const auto inferenceStart =
+        // std::chrono::high_resolution_clock::now();
+        // ----- RMS -----
+        _mlir_ciface_forward1(&sub3DContainer, &paramsContainersRMS[m],
+                              &subResultContainer);
+        rmsPtr = sub3DContainer.getData();
+        mhaPtr = tmp3DMemRef.getData();
+        // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
+        // ----- AllGather -----
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset1, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          mhaPtr[idx+offset0] = rmsPtr[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr + offset1, offset1, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr, offset1, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        // const std::chrono::duration<double, std::milli> inferenceTime =
+        //     inferenceEnd - inferenceStart;
+        // std::cout << "[Log] RMSNorm: " << inferenceTime.count() / 1000 << "s"
+        // << std::endl;
+
+        // ----- MHA -----
+        _mlir_ciface_forward2(&tmp2DContainer, &paramsContainersMHA[m],
+                              &tmp3DMemRef, &mhaMemRef3D1, &mhaMemRef3D2,
+                              &mhaMemRef2D);
+        mhaOutputPtr = tmp2DContainer.getData();
+        // ----- Reduce-Scatter -----
+        MPI_Isend(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        
+        MPI_Isend(mhaOutputPtr + offset0, subSize, MPI_FLOAT, dest2, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx+offset2];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr + offset1, subSize, MPI_FLOAT, dest3, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+
+        // ----- RMS & Add -----
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
+                              &subResultContainer);
+        _mlir_ciface_forward1(&sub3DContainer, &paramsContainersRMS0[m],
+                              &subResultContainer);
+        rmsPtr = sub3DContainer.getData();
+        mhaPtr = tmp3DMemRef.getData();
+        // const auto inferenceEnd = std::chrono::high_resolution_clock::now();
+        // ----- AllGather -----
+        MPI_Isend(rmsPtr, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr + offset1, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          mhaPtr[idx+offset0] = rmsPtr[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaPtr + offset1, offset1, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &send_req[0]);
+        MPI_Irecv(mhaPtr, offset1, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        // ----- MLP -----
+        _mlir_ciface_forward5(&tmp2DContainer, &paramsContainersMLP[m],
+                              &tmp3DMemRef);
+        mhaOutputPtr = tmp2DContainer.getData();
+        // ----- Reduce-Scatter -----
+        MPI_Isend(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr0, subSize, MPI_FLOAT, dest3, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        
+        MPI_Isend(mhaOutputPtr + offset0, subSize, MPI_FLOAT, dest2, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(sub2DPtr1, subSize, MPI_FLOAT, dest2, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx+offset2];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+
+        MPI_Isend(mhaOutputPtr + offset1, subSize, MPI_FLOAT, dest3, 0,
+                  MPI_COMM_WORLD, &send_req[0]);
+        MPI_Irecv(mhaOutputPtr, subSize, MPI_FLOAT, dest1, 0, MPI_COMM_WORLD,
+                  &recv_req[0]);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += sub2DPtr1[idx];
+        }
+        MPI_Wait(&send_req[0], MPI_STATUS_IGNORE);
+        MPI_Wait(&recv_req[0], MPI_STATUS_IGNORE);
+        for (int idx = 0; idx < subSize; idx++) {
+          sub2DPtr0[idx] += mhaOutputPtr[idx];
+        }
+        // ----- Add -----
+        _mlir_ciface_forward3(&subResultContainer, &sub2DContainer,
+                              &subResultContainer);
+        if (m == 31) {
+          subResultPtr = subResultContainer.getData();
+          MPI_Send(subResultPtr, subSize, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+        }
       }
     }
   }
