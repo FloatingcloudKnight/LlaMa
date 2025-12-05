@@ -848,3 +848,30 @@ target_link_libraries(buddy-llama-output-run
   pthread
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
+
+find_package(MPI REQUIRED)
+
+add_executable(buddy-llama-main-run llama-main.cpp)
+
+target_compile_definitions(buddy-llama-main-run PRIVATE 
+  LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
+  LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
+)
+
+target_link_directories(buddy-llama-main-run 
+  PRIVATE 
+  ${LLVM_LIBRARY_DIR}
+  ${MPI_INCLUDE_PATH}
+  )
+
+
+target_link_libraries(buddy-llama-main-run 
+  PRIVATE
+  ${BUDDY_SPLIT_LLAMA_LIBS}
+  ${MPI_CXX_LIBRARIES}
+  numa
+  pthread
+  dl
+  rt
+)
+target_link_options(buddy-llama-main-run PRIVATE)

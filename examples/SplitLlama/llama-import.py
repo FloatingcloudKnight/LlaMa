@@ -100,7 +100,7 @@ assert len(graphs) == 1
 graph = graphs[0]
 params = dynamo_compiler.imported_params[graph]
 
-driver = GraphDriver(graphs[0], 2)
+driver = GraphDriver(graphs[0], 8)
 for i in range(len(driver.subgraphs)):
     driver.subgraphs[i].lower_to_top_level_ir()
 
