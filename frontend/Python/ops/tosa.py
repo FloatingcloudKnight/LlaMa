@@ -500,13 +500,18 @@ def reshape_op(node: ReshapeOp, symbol_table):
     shape will be inferred automatically.
     """
     input1 = symbol_table.get((str(node.args[0]), 0))
-    new_shape = []
-    for i in node.args[1]:
-        new_shape.append(i)
-    total_size = 1
     now_shape = ir.RankedTensorType(input1.type).shape
+    total_size = 1
     for dim_siz in now_shape:
         total_size *= dim_siz
+    
+    new_shape = []
+    if node._newshape is None:
+        for i in node.args[1]:
+            new_shape.append(i)
+    else: 
+        for i in node._newshape:
+            new_shape.append(i)    
 
     neg_one_cnt = 0
     rest_size = 1
@@ -545,8 +550,11 @@ def unsqueeze_op(node: UnsqueezeOp, symbol_table):
     operation.
     """
     input_tensor = symbol_table.get((str(node.args[0]), 0))
+    input_shape = ir.RankedTensorType(input_tensor.type).shape
+    
     dim = node.args[1]
-    sizes = ir.RankedTensorType(input_tensor.type).shape
+    # sizes = ir.RankedTensorType(input_tensor.type).shape
+    sizes = list(input_shape)
     if dim == -1:
         sizes.append(1)
     else:
@@ -1542,7 +1550,8 @@ def sigmoid_op(node: SigmoidOp, symbol_table):
     input1 = symbol_table.get((str(node.args[0]), 0))
     if input1 is None:
         return
-    output_shape = list(node.tensor_meta["shape"])
+    input_shape = ir.RankedTensorType(input1.type).shape
+    output_shape = list(input_shape)
     dtype = node.tensor_meta["dtype"]
     mlir_dtype = mlir_element_type_get(dtype)
     tensor_type = ir.RankedTensorType.get(output_shape, mlir_dtype)
@@ -1913,7 +1922,7 @@ def scaled_dot_product_flash_attention_for_cpu_op(
         memoryview(
             array.array(
                 "i",
-                output_shape[1],
+                [query_shape[0], query_shape[1], query_shape[2]],
             )
         ),
     )

@@ -8,8 +8,16 @@ if(BUDDY_LLAMA_EXAMPLES)
   add_subdirectory(BuddyLlama)
 endif()
 
+if(BUDDY_DIS_LLAMA_EXAMPLES)
+  add_subdirectory(LlamaTest)
+endif()
+
 if(BUDDY_DEEPSEEKR1_EXAMPLES)
   add_subdirectory(BuddyDeepSeekR1)
+endif()
+
+if(BUDDY_TENSORPARALLEL_EXAMPLES)
+  add_subdirectory(BuddyTensorParallel)
 endif()
 
 if(BUDDY_TRANSFORMER_EXAMPLES)
