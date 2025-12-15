@@ -213,18 +213,14 @@ public:
     file.close();
   }
 
-  static void printDebugLogFile(const uint16_t &port, const std::string &info,
-                                 const std::vector<float> &vec,
+  static void printDebugLogFile(const std::vector<float> &vec,
                                  const std::string &filename) {
-    std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/" + filename;
+    std::string logDir = std::string(LLAMA_SPLIT_EXAMPLE_PATH) + "/" + filename + ".log";
     std::ofstream file(logDir, std::ios::app);
     if (!file.is_open()) {
       std::cerr << "[Error] Unable to open the file: " << logDir << std::endl;
       return;
     }
-
-    file << "[DEBUG] port:" << port << '\n';
-    file << "info: " << info << '\n';
     // 设置输出格式（固定小数点，保留6位小数）
     file << "[";
     file << std::fixed << std::setprecision(6);
