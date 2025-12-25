@@ -763,16 +763,16 @@ target_link_libraries(buddy-llama-rms-mlp-1-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable( buddy-llama-mlp-0-run llama-mlp.cpp)
+add_executable(buddy-llama-mlp-0-run llama-mlp.cpp)
 
-target_compile_definitions( buddy-llama-mlp-0-run PRIVATE 
+target_compile_definitions(buddy-llama-mlp-0-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories( buddy-llama-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories(buddy-llama-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries( buddy-llama-mlp-0-run 
+target_link_libraries(buddy-llama-mlp-0-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 
@@ -780,16 +780,16 @@ target_link_libraries( buddy-llama-mlp-0-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable( buddy-llama-mlp-1-run llama-mlp-0.cpp)
+add_executable(buddy-llama-mlp-1-run llama-mlp-0.cpp)
 
-target_compile_definitions( buddy-llama-mlp-1-run PRIVATE 
+target_compile_definitions(buddy-llama-mlp-1-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories( buddy-llama-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories(buddy-llama-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries( buddy-llama-mlp-1-run 
+target_link_libraries(buddy-llama-mlp-1-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 
@@ -797,16 +797,16 @@ target_link_libraries( buddy-llama-mlp-1-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable( buddy-llama-add-mlp-0-run llama-add-mlp.cpp)
+add_executable(buddy-llama-add-mlp-0-run llama-add-mlp.cpp)
 
 target_compile_definitions( buddy-llama-add-mlp-0-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories( buddy-llama-add-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories(buddy-llama-add-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries( buddy-llama-add-mlp-0-run 
+target_link_libraries(buddy-llama-add-mlp-0-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 
@@ -814,16 +814,16 @@ target_link_libraries( buddy-llama-add-mlp-0-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable( buddy-llama-add-mlp-1-run llama-add-mlp-0.cpp)
+add_executable(buddy-llama-add-mlp-1-run llama-add-mlp-0.cpp)
 
-target_compile_definitions( buddy-llama-add-mlp-1-run PRIVATE 
+target_compile_definitions(buddy-llama-add-mlp-1-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories( buddy-llama-add-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories(buddy-llama-add-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries( buddy-llama-add-mlp-1-run 
+target_link_libraries(buddy-llama-add-mlp-1-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 

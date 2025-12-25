@@ -83,7 +83,7 @@ $ export PYTHONPATH=${LLVM_MLIR_BUILD_DIR}/tools/mlir/python_packages/mlir_core:
 $ cmake -G Ninja .. -DBUDDY_SPLIT_LLAMA_EXAMPLES=ON
 $ ninja buddy-llama-xxxx-run
 // For example: 
-$ ninja buddy-llama-input-run
+$ ninja buddy-llama-input-run buddy-llama-rms-mha-0-run buddy-llama-rms-mha-1-run buddy-llama-mha-0-run buddy-llama-mha-1-run buddy-llama-add-mha-0-run buddy-llama-add-mha-1-run buddy-llama-rms-mlp-0-run buddy-llama-rms-mlp-1-run buddy-llama-mlp-0-run buddy-llama-mlp-1-run buddy-llama-add-mlp-0-run buddy-llama-add-mlp-1-run buddy-llama-output-run
 
 $ cd bin
 $ ./buddy-dis-llama-run

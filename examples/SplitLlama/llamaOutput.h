@@ -131,7 +131,8 @@ public:
           const auto inferenceEnd = std::chrono::high_resolution_clock::now();
           const std::chrono::duration<double, std::milli> inferenceTime =
               inferenceEnd - inferenceStart;
-          std::cout << "Token " << currentToken << " : " << inferenceTime.count() / 1000 << "s" << std::endl;
+          std::cout << "Token " << currentToken << " : " << inferenceTime.count() / 1000 - lastTime << "s" << std::endl;
+          lastTime = inferenceTime.count() / 1000;
         }
       }
     });
@@ -160,6 +161,7 @@ private:
   std::string llamaDir = LLAMA_SPLIT_EXAMPLE_PATH;
   const std::string vocabDir = llamaDir + "/vocab.txt";
   std::chrono::high_resolution_clock::time_point inferenceStart;
+  double lastTime = 0.0;
 
   std::vector<float> getFloatData(client::message_ptr msg) {
     if (msg->get_opcode() != websocketpp::frame::opcode::binary) {

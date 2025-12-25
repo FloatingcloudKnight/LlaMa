@@ -181,12 +181,12 @@ private:
       std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
       hdlsSymbol[payload] = hdl;
       connections[hdl] = payload;
-      std::cout << payload << " is connected" << std::endl;
+      // std::cout << payload << " is connected" << std::endl;
     } else if (payload == "OutputMess") {
       std::lock_guard<std::mutex> lock(symbolMutex); // 加锁保护符号表
       hdlsSymbol[payload] = hdl;
       connections[hdl] = payload;
-      std::cout << payload << " is connected" << std::endl;
+      // std::cout << payload << " is connected" << std::endl;
 
       // 获取用户输入
       std::string inputStr;
