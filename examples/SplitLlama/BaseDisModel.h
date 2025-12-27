@@ -1,3 +1,8 @@
+// -*- coding: utf-8 -*-
+// @Time : 2025-06-25 10:00:00
+// @Author : gaoxu
+// @Project : buddy compiler llama
+
 #ifndef BASEDISMODEL_H // 作用：防止BaseDisModel.h被重复引用
 #define BASEDISMODEL_H
 #include <buddy/Core/Container.h>

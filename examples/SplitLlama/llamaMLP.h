@@ -1,3 +1,8 @@
+// -*- coding: utf-8 -*-
+// @Time : 2025-06-25 10:00:00
+// @Author : gaoxu
+// @Project : buddy compiler llama
+
 #ifndef LLAMAMLP_H // 作用：防止llamaMLP.h被重复引用
 #define LLAMAMLP_H
 #include "BaseDisModel.h"

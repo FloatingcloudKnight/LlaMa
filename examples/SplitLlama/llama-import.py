@@ -18,6 +18,15 @@
 #
 # ===---------------------------------------------------------------------------
 
+#!/usr/bin/env python
+
+'''
+# -*- coding: utf-8 -*-
+# @Time : 2025-05-25 10:00:00
+# @Author : gaoxu
+# @Project : buddy compiler llama
+'''
+
 import os
 import argparse
 import torch

@@ -14,6 +14,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+// -*- coding: utf-8 -*-
+// @Time : 2025-05-25 10:00:00
+// @Author : gaoxu
+// @Project : buddy compiler llama
+
 #include <buddy/Core/Container.h>
 #include <buddy/LLM/TextContainer.h>
 #include <chrono>

@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Time : 2025-10-24 10:00:00
+# @Author : gaoxu
+# @Project : buddy compiler llama
+
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/forward0.mlir 
          ${CMAKE_CURRENT_BINARY_DIR}/subgraph0.mlir 
@@ -25,7 +30,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -75,7 +80,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -117,7 +122,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -167,7 +172,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -209,7 +214,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -259,7 +264,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -301,7 +306,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -351,7 +356,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -393,7 +398,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -443,7 +448,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -485,7 +490,7 @@ add_custom_command(
             -eliminate-empty-tensors
             -empty-tensor-to-alloc-tensor
             -one-shot-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -535,7 +540,7 @@ add_custom_command(
             -arith-bufferize
             -buffer-deallocation
             -finalizing-bufferize
-            -matmul-vectorization
+            -matmul-parallel-vectorization-optimize
             -batchmatmul-optimize
             -convert-linalg-to-affine-loops
             -affine-loop-fusion
@@ -763,16 +768,16 @@ target_link_libraries(buddy-llama-rms-mlp-1-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable(buddy-llama-mlp-0-run llama-mlp.cpp)
+add_executable( buddy-llama-mlp-0-run llama-mlp.cpp)
 
-target_compile_definitions(buddy-llama-mlp-0-run PRIVATE 
+target_compile_definitions( buddy-llama-mlp-0-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories(buddy-llama-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories( buddy-llama-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries(buddy-llama-mlp-0-run 
+target_link_libraries( buddy-llama-mlp-0-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 
@@ -780,16 +785,16 @@ target_link_libraries(buddy-llama-mlp-0-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable(buddy-llama-mlp-1-run llama-mlp-0.cpp)
+add_executable( buddy-llama-mlp-1-run llama-mlp-0.cpp)
 
-target_compile_definitions(buddy-llama-mlp-1-run PRIVATE 
+target_compile_definitions( buddy-llama-mlp-1-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories(buddy-llama-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories( buddy-llama-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries(buddy-llama-mlp-1-run 
+target_link_libraries( buddy-llama-mlp-1-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 
@@ -797,16 +802,16 @@ target_link_libraries(buddy-llama-mlp-1-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable(buddy-llama-add-mlp-0-run llama-add-mlp.cpp)
+add_executable( buddy-llama-add-mlp-0-run llama-add-mlp.cpp)
 
 target_compile_definitions( buddy-llama-add-mlp-0-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories(buddy-llama-add-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories( buddy-llama-add-mlp-0-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries(buddy-llama-add-mlp-0-run 
+target_link_libraries( buddy-llama-add-mlp-0-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 
@@ -814,16 +819,16 @@ target_link_libraries(buddy-llama-add-mlp-0-run
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
 
-add_executable(buddy-llama-add-mlp-1-run llama-add-mlp-0.cpp)
+add_executable( buddy-llama-add-mlp-1-run llama-add-mlp-0.cpp)
 
-target_compile_definitions(buddy-llama-add-mlp-1-run PRIVATE 
+target_compile_definitions( buddy-llama-add-mlp-1-run PRIVATE 
   LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
   LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
 )
 
-target_link_directories(buddy-llama-add-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
+target_link_directories( buddy-llama-add-mlp-1-run PRIVATE ${LLVM_LIBRARY_DIR})
 
-target_link_libraries(buddy-llama-add-mlp-1-run 
+target_link_libraries( buddy-llama-add-mlp-1-run 
   PRIVATE
   ${BUDDY_SPLIT_LLAMA_LIBS}
   ${Boost_LIBRARIES} 
@@ -848,3 +853,30 @@ target_link_libraries(buddy-llama-output-run
   pthread
   ${CMAKE_THREAD_LIBS_INIT}  # 添加线程库
 )
+
+find_package(MPI REQUIRED)
+
+add_executable(buddy-llama-main-run llama-main.cpp)
+
+target_compile_definitions(buddy-llama-main-run PRIVATE 
+  LLAMA_SPLIT_EXAMPLE_PATH="${LLAMA_SPLIT_EXAMPLE_PATH}" 
+  LLAMA_EXAMPLE_BUILD_PATH="${LLAMA_EXAMPLE_BUILD_PATH}"
+)
+
+target_link_directories(buddy-llama-main-run 
+  PRIVATE 
+  ${LLVM_LIBRARY_DIR}
+  ${MPI_INCLUDE_PATH}
+  )
+
+
+target_link_libraries(buddy-llama-main-run 
+  PRIVATE
+  ${BUDDY_SPLIT_LLAMA_LIBS}
+  ${MPI_CXX_LIBRARIES}
+  numa
+  pthread
+  dl
+  rt
+)
+target_link_options(buddy-llama-main-run PRIVATE)

@@ -1,3 +1,8 @@
+// -*- coding: utf-8 -*-
+// @Time : 2025-06-25 10:00:00
+// @Author : gaoxu
+// @Project : buddy compiler llama
+
 #ifndef SHAREDQUEUETEMP_H
 #define SHAREDQUEUETEMP_H
 

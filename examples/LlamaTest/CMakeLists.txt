@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Time : 2025-05-25 10:00:00
+# @Author : gaoxu
+# @Project : buddy compiler llama
+
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/forward0.mlir 
          ${CMAKE_CURRENT_BINARY_DIR}/subgraph0.mlir 
